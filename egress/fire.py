@@ -11,6 +11,7 @@ roads are impassable only on stretches inside the area; access-loss counts use t
 """
 from __future__ import annotations
 
+import math
 from functools import lru_cache
 from threading import Lock
 
@@ -66,14 +67,22 @@ _lock = Lock()
 
 
 def hypothetical(area: engine.Area, lon: float, lat: float, radius_m: float) -> dict:
-    """A supplied hypothetical affected area: a circle. The radius is an input, not a predicted fire spread."""
-    r = min(max(float(radius_m), MIN_RADIUS_M), MAX_RADIUS_M)
-    key = ("hyp", area.name, round(lon, 5), round(lat, 5), round(r))
+    """A supplied hypothetical affected area: a circle. The radius is an input, not a predicted fire spread.
+
+    The validated inputs are used exactly, for the geometry, the cache identity and the returned metadata alike
+    (no rounding on any side), so a result never depends on which requests came before it."""
+    lon, lat, r = float(lon), float(lat), float(radius_m)
+    if not all(math.isfinite(v) for v in (lon, lat, r)):
+        raise ValueError("centre and radius must be finite numbers")
+    if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+        raise ValueError("centre must be a longitude/latitude")
+    if not MIN_RADIUS_M <= r <= MAX_RADIUS_M:
+        raise ValueError(f"radius must be {MIN_RADIUS_M:.0f}-{MAX_RADIUS_M:.0f} m")
+    key = ("hyp", area.name, lon, lat, r)
     with _lock:
         if key not in _cache:
             centre = Point(_TO_M(lon, lat))
-            _cache[key] = _result(area, centre.buffer(r, 64), "hypothetical",
-                                  dict(centre=[round(lon, 6), round(lat, 6)], radius_m=round(r)))
+            _cache[key] = _result(area, centre.buffer(r, 64), "hypothetical", dict(centre=[lon, lat], radius_m=r))
         return _cache[key]
 
 

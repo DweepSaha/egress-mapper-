@@ -117,9 +117,10 @@ def fire_historical():
 @app.get("/api/tantallon/fire/hypothetical")
 def fire_hypothetical(lon: float, lat: float, radius: float):
     """Road access under a SUPPLIED hypothetical circular area. The radius is an input, not predicted spread."""
-    if not fire.MIN_RADIUS_M <= radius <= fire.MAX_RADIUS_M:
-        raise HTTPException(400, f"radius must be {fire.MIN_RADIUS_M:.0f}-{fire.MAX_RADIUS_M:.0f} m")
-    return fire.hypothetical(get("tantallon")["area"], lon, lat, radius)
+    try:
+        return fire.hypothetical(get("tantallon")["area"], lon, lat, radius)
+    except ValueError as e:                     # non-finite / out-of-range centre or radius
+        raise HTTPException(400, str(e))
 
 
 class Proposal(BaseModel):
