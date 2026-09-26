@@ -176,14 +176,16 @@ function startDrawing() {
 function mitigHtml(r) {
   if (!r.ok) return `<div class="cut">${r.message}</div>`;
   const b = r.before, a = r.after;
-  const after = a ? (a.worst_cut > 0
-      ? `With this road, the largest single choke point in the neighbourhood cuts off <b>${a.worst_cut}</b> (shown in blue).`
-      : `With this road, no single blocked road area cuts these buildings off.`) : "";
-  return `<div class="big">${r.regained} of ${b.worst_cut} mapped buildings regain a separate way out</div>
-    <div class="cut">Before: if this road area is blocked, ${b.worst_cut} of ${b.homes} mapped buildings could lose
-      their way out to a major road.</div>
-    <div class="cut">${after}</div>
-    <div class="src">Proposed road: ${r.length_m.toLocaleString()} m, straight line between the nearest existing road points.</div>`;
+  const road = `<div class="src">Proposed road: ${r.length_m.toLocaleString()} m, straight line between the nearest
+    existing road junctions or road ends.</div>`;
+  const beforeTxt = `<div class="cut">Before: if this road area is blocked, ${b.worst_cut} of ${b.homes} mapped buildings
+    could lose their way out to a major road.</div>`;
+  if (r.unavailable) return `<div class="big">Result unavailable</div>${beforeTxt}<div class="cut">${r.message}</div>${road}`;
+  const after = a.worst_cut > 0
+    ? `For these same mapped buildings, the largest single choke point with the road cuts off <b>${a.worst_cut}</b> (shown in blue).`
+    : `For these same mapped buildings, no single blocked road area cuts them off with the road.`;
+  return `<div class="big">${r.regained} of ${b.worst_cut} mapped buildings regain access under this blockage</div>
+    ${beforeTxt}<div class="cut">${after}</div>${road}`;
 }
 
 async function runMitigation() {
@@ -209,7 +211,7 @@ async function runMitigation() {
   box.dataset.state = r.ok ? "done" : "error";   // used by the scripted demo check
   if (!r.ok) { map.getSource("proposal").setData(fc(clicks.map(pt))); return; }
   map.getSource("proposal").setData(fc([r.road, pt(r.road.geometry.coordinates[0]), pt(r.road.geometry.coordinates[1])]));
-  if (r.after_geo) {
+  if (r.after_geo && !r.unavailable) {
     map.getSource("mit-blocked").setData(r.after_geo.blocked);
     map.getSource("mit-cut").setData(r.after_geo.cut_roads);
   }

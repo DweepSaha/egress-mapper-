@@ -3,14 +3,16 @@
 Model
 -----
 * Roads: the prepared drivable network, projected to EPSG:2953, treated as undirected (one-way rules ignored).
-* Exit roads: collector/arterial classes (EXIT_CLASSES). Reaching any exit road counts as "out".
-* Neighbourhood: a connected cluster of local roads after removing exit roads. Its gateways are the points where
-  those local roads meet an exit road.
-* Homes: building footprints >= MIN_HOME_M2, OSM and Microsoft counted separately; every count uses the higher.
-  Each footprint is attached to its nearest road (within MAX_ASSIGN_M).
-* Sweep: a circle of BLOCK_RADIUS_M centred every SWEEP_SPACING_M along the roads. Roads are impassable only where
-  the circle touches them. Homes whose route to every gateway is cut are "cut off"; homes inside the circle are
-  counted separately as "in the blocked area".
+* Exit roads: collector/arterial classes (EXIT_CLASSES) that pass the spur rule. Reaching any exit road counts as "out".
+* Neighbourhood: a connected cluster of local roads after removing exit roads; its gateways are the points where those
+  local roads meet an exit road. A local road whose ends are both exit-road junctions (or a local loop on one junction)
+  is its own neighbourhood, so its buildings are never dropped.
+* Homes (shown as "mapped buildings"): footprints >= MIN_HOME_M2, OSM and Microsoft counted separately; every reported
+  count uses the higher. Each building keeps an id, its centroid, and its attachment position on its nearest road
+  (within MAX_ASSIGN_M).
+* Sweep: a circle of BLOCK_RADIUS_M centred every SWEEP_SPACING_M along the roads. Roads are impassable only on the
+  stretches the circle covers (a winding road can have several). A building whose centroid lies inside the circle is
+  "in the blocked area"; any other building that can no longer reach a usable gateway is "cut off".
 """
 from __future__ import annotations
 
@@ -40,6 +42,8 @@ BOUNDARY_BUFFER_M = 2000  # not assessed within this distance of the study-box e
 MIN_HOME_M2 = 40.0        # footprints smaller than this are treated as sheds/garages
 MAX_ASSIGN_M = 150.0      # footprints farther than this from any road are not attached
 
+SOURCES = ("osm", "ms")
+
 # study boxes (lon/lat) the road extracts were cut from; see DATA.md
 STUDY_BBOX = {
     "fredericton": (-66.91630, 45.75717, -66.38280, 46.14033),
@@ -52,6 +56,10 @@ def _classes(hw) -> set[str]:
     return set(hw) if isinstance(hw, list) else {hw}
 
 
+def _empty_src():
+    return {s: np.empty(0) for s in SOURCES}
+
+
 @dataclass
 class Edge:
     u: int
@@ -59,7 +67,8 @@ class Edge:
     line: LineString          # oriented from u to v
     exit: bool                # qualifying class AND part of the through-road system (see _mark_spurs)
     qualifying: bool = False  # collector/arterial class, before the spur rule
-    homes_t: dict = field(default_factory=lambda: {"osm": np.empty(0), "ms": np.empty(0)})  # positions along line
+    homes_t: dict = field(default_factory=_empty_src)   # attachment position along line, per source
+    homes_id: dict = field(default_factory=_empty_src)  # building ids (index into Area.bld[src]["pts"]), per source
 
 
 @dataclass
@@ -73,6 +82,7 @@ class Area:
     node_tree: shapely.STRtree
     assessable: shapely.Geometry   # study box shrunk by BOUNDARY_BUFFER_M, EPSG:2953
     stats: dict
+    bld: dict = field(default_factory=dict)   # src -> {"pts": centroids (EPSG:2953), "tree": STRtree}
 
 
 def load_area(name: str) -> Area:
@@ -80,27 +90,39 @@ def load_area(name: str) -> Area:
     G = ox.project_graph(G, to_crs=config.ANALYSIS_CRS)
     U = ox.convert.to_undirected(G)
     node_xy = {n: (d["x"], d["y"]) for n, d in U.nodes(data=True)}
-
-    edges = []
-    for u, v, d in U.edges(data=True):
-        line = d.get("geometry") or LineString([node_xy[u], node_xy[v]])
-        if Point(line.coords[0]).distance(Point(node_xy[u])) > Point(line.coords[0]).distance(Point(node_xy[v])):
-            line = LineString(line.coords[::-1])  # orient u -> v
-        q = bool(_classes(d.get("highway")) & EXIT_CLASSES)
-        edges.append(Edge(u, v, line, exit=q, qualifying=q))
-
+    roads = [(u, v, d.get("geometry"), d.get("highway")) for u, v, d in U.edges(data=True)]
     to_m = Transformer.from_crs("EPSG:4326", config.ANALYSIS_CRS, always_xy=True).transform
     study = transform(to_m, box(*STUDY_BBOX[name]))
+    buildings, bstats = {}, {}
+    for src, path in (("osm", config.buildings_osm(name)), ("ms", config.buildings_ms(name))):
+        b = gpd.read_file(path).to_crs(config.ANALYSIS_CRS)
+        n_all = len(b)
+        b = b[b.geometry.area >= MIN_HOME_M2]
+        buildings[src] = b.geometry.centroid.values
+        bstats[src] = dict(footprints=n_all, homes=len(b))
+    area = build_area(name, roads, node_xy, study, buildings)
+    for src in SOURCES:
+        area.stats[src].update(bstats[src])
+    return area
+
+
+def build_area(name: str, roads, node_xy: dict, study, buildings: dict) -> Area:
+    """Build an Area from roads [(u, v, geometry|None, highway)], node coordinates, the study box polygon and building
+    centroids {src: array of shapely Points}, all in EPSG:2953. Used by load_area and by the regression tests."""
+    edges = []
+    for u, v, geom, hw in roads:
+        line = geom or LineString([node_xy[u], node_xy[v]])
+        if Point(line.coords[0]).distance(Point(node_xy[u])) > Point(line.coords[0]).distance(Point(node_xy[v])):
+            line = LineString(line.coords[::-1])  # orient u -> v
+        q = bool(_classes(hw) & EXIT_CLASSES)
+        edges.append(Edge(u, v, line, exit=q, qualifying=q))
     spur_stats = _mark_spurs(edges, node_xy, study)
     exit_nodes = {n for e in edges if e.exit for n in (e.u, e.v)}
-
-    edge_tree = shapely.STRtree([e.line for e in edges])
     node_ids = np.array(list(node_xy))
-    node_tree = shapely.STRtree([Point(node_xy[n]) for n in node_ids])
-    assessable = study.buffer(-BOUNDARY_BUFFER_M)
-
-    area = Area(name, edges, node_xy, exit_nodes, edge_tree, node_ids, node_tree, assessable, {"spurs": spur_stats})
-    _attach_homes(area)
+    area = Area(name, edges, node_xy, exit_nodes, shapely.STRtree([e.line for e in edges]), node_ids,
+                shapely.STRtree([Point(node_xy[n]) for n in node_ids]), study.buffer(-BOUNDARY_BUFFER_M),
+                {"spurs": spur_stats})
+    _attach_homes(area, buildings)
     return area
 
 
@@ -135,24 +157,26 @@ def _mark_spurs(edges: list[Edge], node_xy: dict, study) -> dict:
     return dict(qualifying=sum(e.qualifying for e in edges), spur_reclassified=n_spur)
 
 
-def _attach_homes(area: Area) -> None:
+def _attach_homes(area: Area, buildings: dict) -> None:
     lines = np.array([e.line for e in area.edges], dtype=object)
-    for src, path in (("osm", config.buildings_osm(area.name)), ("ms", config.buildings_ms(area.name))):
-        b = gpd.read_file(path).to_crs(config.ANALYSIS_CRS)
-        n_all = len(b)
-        b = b[b.geometry.area >= MIN_HOME_M2]
-        pts = b.geometry.centroid.values
-        (pi, ei), dist = area.edge_tree.query_nearest(pts, max_distance=MAX_ASSIGN_M, return_distance=True)
+    for src in SOURCES:
+        pts = np.asarray(buildings.get(src, []), dtype=object)
+        area.bld[src] = dict(pts=pts, tree=shapely.STRtree(pts))
+        if not len(pts):
+            area.stats[src] = dict(attached=0, on_exit_roads=0)
+            continue
+        (pi, ei), _ = area.edge_tree.query_nearest(pts, max_distance=MAX_ASSIGN_M, return_distance=True)
         _, first = np.unique(pi, return_index=True)          # ties: keep one edge per building
         pi, ei = pi[first], ei[first]
         t = shapely.line_locate_point(lines[ei], pts[pi])
-        by_edge = defaultdict(list)
-        for e_idx, tt in zip(ei, t):
-            by_edge[e_idx].append(tt)
-        for e_idx, ts in by_edge.items():
+        by_edge = defaultdict(lambda: ([], []))
+        for b_id, e_idx, tt in zip(pi, ei, t):
+            by_edge[e_idx][0].append(tt)
+            by_edge[e_idx][1].append(b_id)
+        for e_idx, (ts, ids) in by_edge.items():
             area.edges[e_idx].homes_t[src] = np.array(ts)
-        area.stats[src] = dict(footprints=n_all, homes=len(b), attached=len(pi),
-                               on_exit_roads=int(sum(area.edges[i].exit for i in ei)))
+            area.edges[e_idx].homes_id[src] = np.array(ids, dtype=int)
+        area.stats[src] = dict(attached=len(pi), on_exit_roads=int(sum(area.edges[i].exit for i in ei)))
 
 
 @dataclass
@@ -167,11 +191,17 @@ class Neighbourhood:
     def n_homes(self) -> int:
         return max(self.homes["osm"], self.homes["ms"])
 
+    def cohort(self, area: Area) -> dict:
+        """The building ids attached to this neighbourhood's roads, per source."""
+        return {s: set(np.concatenate([area.edges[i].homes_id[s] for i in self.edge_idx] or [np.empty(0)]).astype(int))
+                for s in SOURCES}
+
 
 def neighbourhoods(area: Area) -> list[Neighbourhood]:
-    """Connected clusters of local roads, split at exit-road nodes."""
+    """Connected clusters of local roads, split at exit-road nodes. A local road whose ends are both exit-road nodes
+    (including a local loop on a single exit node) becomes its own neighbourhood."""
     L = nx.Graph()
-    for i, e in enumerate(area.edges):
+    for e in area.edges:
         if not e.exit:
             for n in (e.u, e.v):
                 if n not in area.exit_nodes:
@@ -188,34 +218,53 @@ def neighbourhoods(area: Area) -> list[Neighbourhood]:
         if e.exit:
             continue
         c = comp_of.get(e.u, comp_of.get(e.v))
-        if c is None:          # local edge directly between two exit nodes: no neighbourhood
-            continue
+        if c is None:          # both ends are exit-road junctions: the road's interior is its own neighbourhood
+            out.append(Neighbourhood(len(out), set(), set(), [], {"osm": 0, "ms": 0}))
+            c = len(out) - 1
         nb = out[c]
         nb.edge_idx.append(i)
         for n in (e.u, e.v):
             if n in area.exit_nodes:
                 nb.gateways.add(n)
-        for src in ("osm", "ms"):
+        for src in SOURCES:
             nb.homes[src] += len(e.homes_t[src])
     return out
 
 
-def _blocked_interval(line: LineString, circle) -> tuple[float, float] | None:
-    inter = line.intersection(circle)
+def _blocked_intervals(line: LineString, geom) -> list[tuple[float, float]]:
+    """Separate stretches of `line` covered by `geom`, as sorted, merged (start, end) positions along the line."""
+    inter = line.intersection(geom)
     if inter.is_empty:
-        return None
-    ts = [line.project(Point(c)) for g in getattr(inter, "geoms", [inter]) for c in g.coords]
-    return (min(ts), max(ts))
+        return []
+    ivs = []
+    for g in getattr(inter, "geoms", [inter]):
+        ts = [line.project(Point(c)) for c in g.coords]
+        ivs.append((min(ts), max(ts)))
+    ivs.sort()
+    merged = [list(ivs[0])]
+    for a, b in ivs[1:]:
+        if a <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
+    return [tuple(m) for m in merged]
 
 
-def evaluate_block(area: Area, nb: Neighbourhood, centre: Point) -> dict:
-    """Homes in `nb` cut off from every gateway when a circle at `centre` is blocked."""
-    circle = centre.buffer(BLOCK_RADIUS_M)
-    removed = {int(area.node_ids[i]) for i in area.node_tree.query(circle, predicate="intersects")}
-    nb_edges = set(nb.edge_idx)
-    blocked = {int(i): _blocked_interval(area.edges[int(i)].line, circle)
-               for i in area.edge_tree.query(circle, predicate="intersects") if int(i) in nb_edges}
+def _member(ids: np.ndarray, s: set) -> np.ndarray:
+    """Boolean mask: which ids are in set s (small per-segment arrays; faster than np.isin here)."""
+    if not s:
+        return np.zeros(len(ids), dtype=bool)
+    return np.fromiter((int(i) in s for i in ids), dtype=bool, count=len(ids))
 
+
+def evaluate_blockage(area: Area, nb: Neighbourhood, removed: set, blocked: dict, zone,
+                      gateways: set | None = None, cohort: dict | None = None) -> dict:
+    """Buildings in `nb` cut off from every usable gateway.
+
+    removed: road nodes inside the blocked zone; blocked: edge index -> list of blocked intervals; zone: the blocked
+    geometry (a building whose centroid is inside it is "in the blocked area", not "cut off"); gateways: optionally
+    restrict to gateways still connected onward; cohort: optionally count only these building ids per source."""
+    usable = nb.gateways if gateways is None else nb.gateways & gateways
     adj = defaultdict(list)
     for i in nb.edge_idx:
         if i in blocked:
@@ -223,7 +272,7 @@ def evaluate_block(area: Area, nb: Neighbourhood, centre: Point) -> dict:
         e = area.edges[i]
         adj[e.u].append(e.v)
         adj[e.v].append(e.u)
-    reach = {g for g in nb.gateways if g not in removed}
+    reach = {g for g in usable if g not in removed}
     q = deque(reach)
     while q:
         n = q.popleft()
@@ -232,31 +281,49 @@ def evaluate_block(area: Area, nb: Neighbourhood, centre: Point) -> dict:
                 reach.add(m)
                 q.append(m)
 
-    cut = {"osm": 0, "ms": 0}
-    inside = {"osm": 0, "ms": 0}
+    inzone = {s: set(area.bld[s]["tree"].query(zone, predicate="contains").tolist()) for s in SOURCES}
+    cut_ids = {s: set() for s in SOURCES}
+    in_block_ids = {s: set() for s in SOURCES}
     cut_edges = set()
     for i in nb.edge_idx:
         e = area.edges[i]
-        iv = blocked.get(i)
-        if iv is None and e.u not in reach and e.v not in reach:
+        ivs = blocked.get(i)
+        u_ok, v_ok = e.u in reach, e.v in reach
+        if not ivs and not u_ok and not v_ok:
             cut_edges.add(i)   # the whole road segment has lost its way out (with or without homes on it)
-        for src in ("osm", "ms"):
-            t = e.homes_t[src]
+        for s in SOURCES:
+            t, ids = e.homes_t[s], e.homes_id[s]
             if not len(t):
                 continue
-            if iv is None:
-                if e.u not in reach and e.v not in reach:
-                    cut[src] += len(t)
-                continue
-            a, b = iv
-            before, after = t < a, t > b
-            inside[src] += int((~before & ~after).sum())
-            if e.u not in reach:
-                cut[src] += int(before.sum())
-            if e.v not in reach:
-                cut[src] += int(after.sum())
+            if cohort is not None:
+                keep = _member(ids, cohort[s])
+                t, ids = t[keep], ids[keep]
+                if not len(t):
+                    continue
+            if ivs:   # before the first blocked stretch -> via u; after the last -> via v; between -> trapped
+                ok = ((t < ivs[0][0]) & u_ok) | ((t > ivs[-1][1]) & v_ok)
+            else:
+                ok = np.full(len(t), u_ok or v_ok)
+            phys = _member(ids, inzone[s])
+            in_block_ids[s].update(ids[phys].tolist())
+            cut_ids[s].update(ids[~ok & ~phys].tolist())
+    cut = {s: len(cut_ids[s]) for s in SOURCES}
+    inside = {s: len(in_block_ids[s]) for s in SOURCES}
     return dict(cut=max(cut.values()), cut_osm=cut["osm"], cut_ms=cut["ms"], inside=max(inside.values()),
-                cut_edges=cut_edges)
+                cut_edges=cut_edges, cut_ids=cut_ids)
+
+
+def evaluate_block(area: Area, nb: Neighbourhood, centre: Point, cohort: dict | None = None) -> dict:
+    """Buildings in `nb` cut off from every gateway when a circle at `centre` is blocked."""
+    circle = centre.buffer(BLOCK_RADIUS_M)
+    removed = {int(area.node_ids[i]) for i in area.node_tree.query(circle, predicate="intersects")}
+    nb_edges = set(nb.edge_idx)
+    blocked = {}
+    for i in area.edge_tree.query(circle, predicate="intersects"):
+        i = int(i)
+        if i in nb_edges:
+            blocked[i] = _blocked_intervals(area.edges[i].line, circle)
+    return evaluate_blockage(area, nb, removed, blocked, circle, cohort=cohort)
 
 
 def sample_points(area: Area) -> list[Point]:
@@ -268,6 +335,24 @@ def sample_points(area: Area) -> list[Point]:
         if L % SWEEP_SPACING_M:
             pts.append(Point(e.line.coords[-1]))
     return pts
+
+
+def _worst(area: Area, nb: Neighbourhood, pts, pt_tree, cohort: dict | None = None):
+    """Worst single blockage for `nb` over all sweep centres near it: (result, centre)."""
+    lines = [area.edges[i].line for i in nb.edge_idx]
+    reach_geom = shapely.union_all(lines + [Point(area.node_xy[g]) for g in nb.gateways])
+    worst = dict(cut=0, cut_osm=0, cut_ms=0, inside=0, cut_edges=set(), cut_ids={s: set() for s in SOURCES})
+    worst_pt = None
+    for j in pt_tree.query(reach_geom, predicate="dwithin", distance=BLOCK_RADIUS_M):
+        r = evaluate_block(area, nb, pts[int(j)], cohort)
+        if r["cut"] > worst["cut"]:
+            worst, worst_pt = r, pts[int(j)]
+    return worst, worst_pt
+
+
+def _assessed(area: Area, nb: Neighbourhood) -> bool:
+    # boundary rule applies to the roads themselves, not the 40 m display buffer
+    return area.assessable.contains(shapely.union_all([area.edges[i].line for i in nb.edge_idx]))
 
 
 def scan(area: Area, only_nodes: set[int] | None = None, min_homes: int = MIN_HOMES) -> list[dict]:
@@ -283,16 +368,9 @@ def scan(area: Area, only_nodes: set[int] | None = None, min_homes: int = MIN_HO
             continue
         lines = [area.edges[i].line for i in nb.edge_idx]
         footprint = shapely.union_all([l.buffer(40) for l in lines])   # display shape only
-        # boundary rule applies to the roads themselves, not the 40 m display buffer
-        assessed = area.assessable.contains(shapely.union_all(lines))
-        worst = dict(cut=0, cut_osm=0, cut_ms=0, inside=0, cut_edges=set())
-        worst_pt = None
-        if assessed:
-            reach_geom = shapely.union_all(lines + [Point(area.node_xy[g]) for g in nb.gateways])
-            for j in pt_tree.query(reach_geom, predicate="dwithin", distance=BLOCK_RADIUS_M):
-                r = evaluate_block(area, nb, pts[int(j)])
-                if r["cut"] > worst["cut"]:
-                    worst, worst_pt = r, pts[int(j)]
+        assessed = _assessed(area, nb)
+        worst, worst_pt = _worst(area, nb, pts, pt_tree) if assessed else (
+            dict(cut=0, cut_osm=0, cut_ms=0, inside=0, cut_edges=set()), None)
         status = ("not_assessed" if not assessed else
                   "red" if worst["cut"] >= RED_MIN_CUT else "amber" if worst["cut"] > 0 else "green")
         results.append(dict(nid=nb.nid, status=status, homes=nb.n_homes, homes_osm=nb.homes["osm"],
@@ -316,60 +394,83 @@ _TO_M = Transformer.from_crs("EPSG:4326", config.ANALYSIS_CRS, always_xy=True).t
 
 
 def _snap(area: Area, lonlat) -> int | None:
+    """Nearest existing road node (junction or road end) within SNAP_MAX_M; roads are not split mid-segment."""
     p = Point(_TO_M(*lonlat))
     i, d = area.node_tree.query_nearest(p, return_distance=True)
     return int(area.node_ids[i[0]]) if len(i) and d[0] <= SNAP_MAX_M else None
 
 
 def with_new_road(area: Area, a: int, b: int) -> tuple[Area, LineString]:
-    """A temporary copy of the area with one proposed local road from node a to node b (cache untouched)."""
+    """A temporary copy of the area with one proposed local road from node a to node b (cache untouched).
+    Existing edge indices are preserved; the new road is appended last."""
     line = LineString([area.node_xy[a], area.node_xy[b]])
-    new = Edge(a, b, line, exit=False, qualifying=False)
-    edges = area.edges + [new]
+    edges = area.edges + [Edge(a, b, line, exit=False, qualifying=False)]
     copy = Area(area.name, edges, area.node_xy, area.exit_nodes, shapely.STRtree([e.line for e in edges]),
-                area.node_ids, area.node_tree, area.assessable, area.stats)
+                area.node_ids, area.node_tree, area.assessable, area.stats, area.bld)
     return copy, line
 
 
-def _choke_cut(area: Area, nodes: set[int], centre: Point) -> dict:
-    """Buildings cut off by a blockage at `centre`, within the neighbourhood that contains `nodes`."""
-    for nb in neighbourhoods(area):
-        if nodes & nb.local_nodes:
-            return evaluate_block(area, nb, centre) if nb.gateways else dict(cut=nb.n_homes, cut_edges=set(nb.edge_idx))
-    return dict(cut=0, cut_edges=set())
+def mitigate_nodes(area: Area, a: int, b: int, choke: Point | None = None) -> dict:
+    """Mitigation test between two existing road nodes. Compares the ORIGINAL neighbourhood's building cohort under
+    its original worst blockage, before vs. after adding the proposed road.
+    choke: override the blockage location (regression tests only; normally the neighbourhood's worst blockage)."""
+    if a == b:
+        return dict(ok=False, message="Both ends joined the same road point; draw a longer road.")
+    touched = {a, b}
+    # only neighbourhoods whose LOCAL roads the proposed road starts from are being mitigated; neighbourhoods that
+    # merely share a major-road junction with an endpoint are unaffected by it
+    own = {nb.nid for nb in neighbourhoods(area) if touched & nb.local_nodes}
+    before = [r for r in scan(area, only_nodes=touched, min_homes=1)
+              if r["nid"] in own and r["status"] != "not_assessed" and r["worst_cut"] > 0]
+    if not before:
+        return dict(ok=False, message="This road doesn't start from the streets of an assessed neighbourhood "
+                    "with a choke point.")
+    worst = max(before, key=lambda r: r["worst_cut"])
+    if choke is not None:
+        worst = dict(worst, choke=choke)
+    nb0 = next(nb for nb in neighbourhoods(area) if nb.nid == worst["nid"])
+    cohort = nb0.cohort(area)
+    r0 = evaluate_block(area, nb0, worst["choke"], cohort)
+    worst["worst_cut"] = r0["cut"]
+
+    new_area, line = with_new_road(area, a, b)
+    orig_edges = set(nb0.edge_idx)
+    # the resulting neighbourhood is the one containing the original neighbourhood's roads - never the largest
+    nb1 = next(nb for nb in neighbourhoods(new_area) if orig_edges <= set(nb.edge_idx))
+    road = dict(type="Feature", properties=dict(length_m=round(line.length)), geometry=mapping(transform(_TO_LL, line)))
+    base = dict(ok=True, road=road, length_m=round(line.length),
+                before=dict(nid=worst["nid"], homes=worst["homes"], worst_cut=worst["worst_cut"], status=worst["status"]))
+    if not _assessed(new_area, nb1):
+        return dict(base, unavailable=True, message="With this road the neighbourhood reaches the edge of our road "
+                    "data, so the result can't be assessed fairly.")
+
+    r1 = evaluate_block(new_area, nb1, worst["choke"], cohort)
+    regained_src = {s: len(r0["cut_ids"][s] - r1["cut_ids"][s]) for s in SOURCES}
+    pts = sample_points(new_area)
+    new_worst, new_pt = _worst(new_area, nb1, pts, shapely.STRtree(pts), cohort)
+    after = dict(worst_cut=new_worst["cut"], gateways=len(nb1.gateways),
+                 status="red" if new_worst["cut"] >= RED_MIN_CUT else "amber" if new_worst["cut"] > 0 else "green")
+    after_geo = results_geojson([dict(nid=nb1.nid, status=after["status"], homes=worst["homes"], homes_osm=0, homes_ms=0,
+                                      gateways=after["gateways"], worst_cut=new_worst["cut"], worst_cut_osm=0,
+                                      worst_cut_ms=0, worst_inside=0, rank=None, choke=new_pt,
+                                      geometry=shapely.union_all([new_area.edges[i].line.buffer(40) for i in nb1.edge_idx]),
+                                      streets=shapely.MultiLineString([new_area.edges[i].line for i in nb1.edge_idx]),
+                                      cut_lines=shapely.union_all([new_area.edges[i].line for i in new_worst["cut_edges"]])
+                                      if new_worst["cut_edges"] else None)])
+    return dict(base, unavailable=False,
+                before_cut_src={s: len(r0["cut_ids"][s]) for s in SOURCES},
+                same_block_cut_src={s: len(r1["cut_ids"][s]) for s in SOURCES},
+                regained_src=regained_src,
+                regained=max(regained_src.values()),          # frozen higher-of-two reporting rule
+                same_block_cut=r1["cut"], after=after, after_geo=after_geo)
 
 
 def mitigate(area: Area, a_ll, b_ll) -> dict:
-    """Mitigation test: add a proposed road between the road points nearest two clicks and re-scan what it touches."""
+    """Mitigation test from two clicks: each end joins the nearest existing road node (within SNAP_MAX_M)."""
     a, b = _snap(area, a_ll), _snap(area, b_ll)
     if a is None or b is None:
-        return dict(ok=False, message=f"Each end must be within {SNAP_MAX_M:.0f} m of an existing road.")
-    if a == b:
-        return dict(ok=False, message="Both ends snapped to the same road point; draw a longer road.")
-    touched = {a, b}
-    before = scan(area, only_nodes=touched, min_homes=1)
-    before = [r for r in before if r["status"] != "not_assessed" and r["worst_cut"] > 0]
-    if not before:
-        return dict(ok=False, message="This road doesn't connect to an assessed neighbourhood with a choke point.")
-    worst = max(before, key=lambda r: r["worst_cut"])
-    new_area, line = with_new_road(area, a, b)
-    nb_nodes = next(nb.local_nodes for nb in neighbourhoods(area) if nb.nid == worst["nid"])
-    same_block = _choke_cut(new_area, nb_nodes, worst["choke"])
-    after = scan(new_area, only_nodes=nb_nodes | touched, min_homes=1)
-    after = max(after, key=lambda r: r["homes"]) if after else None
-    regained = max(0, worst["worst_cut"] - same_block["cut"])
-    to_ll = _TO_LL
-    return dict(
-        ok=True,
-        road=dict(type="Feature", properties=dict(length_m=round(line.length)), geometry=mapping(transform(to_ll, line))),
-        length_m=round(line.length),
-        before=dict(nid=worst["nid"], homes=worst["homes"], worst_cut=worst["worst_cut"], status=worst["status"]),
-        same_block_cut=same_block["cut"],
-        regained=regained,
-        after=None if after is None else dict(homes=after["homes"], worst_cut=after["worst_cut"], status=after["status"],
-                                              gateways=after["gateways"]),
-        after_geo=results_geojson([after]) if after is not None else None,
-    )
+        return dict(ok=False, message=f"Each end must be within {SNAP_MAX_M:.0f} m of an existing road junction or road end.")
+    return mitigate_nodes(area, a, b)
 
 
 _TO_LL = Transformer.from_crs(config.ANALYSIS_CRS, "EPSG:4326", always_xy=True).transform
