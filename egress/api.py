@@ -150,6 +150,16 @@ def nb_probe(area: str, nid: int, p: ProbePoint):
     return probe.probe(c["area"], r, p.lon, p.lat)
 
 
+@app.get("/api/{area}/nb/{nid}/probe-roads")
+def nb_probe_roads(area: str, nid: int):
+    """Roads where a blockage may be placed for this neighbourhood (its own roads + connections to major roads)."""
+    c = get(area)
+    r = next((r for r in c["results"] if r["nid"] == nid), None)
+    if r is None:
+        raise HTTPException(404, f"no neighbourhood {nid}")
+    return probe.eligible_geojson(c["area"], r)
+
+
 class Proposal(BaseModel):
     a: tuple[float, float]   # lon, lat of first click
     b: tuple[float, float]

@@ -272,6 +272,7 @@ function select(nid) {
   map.setFilter("cut", ["==", ["get", "nid"], nid]);
   setBlockedFilter(nid);
   renderBlockage();
+  if (f.properties.status !== "not_assessed") loadProbeRoads(current, nid);
   const b = new maplibregl.LngLatBounds();
   const add = (c) => (typeof c[0] === "number" ? b.extend(c) : c.forEach(add));
   add(f.geometry.coordinates);
@@ -415,7 +416,6 @@ async function loadArea(name) {
   map.getSource("nb").setData(scan.neighbourhoods);
   map.getSource("streets").setData(scan.streets);
   map.getSource("cut").setData(scan.cut_roads);
-  roadsData = roads;                       // snap preview for dragging (display only)
   map.getSource("blocked").setData(scan.blocked);
   map.getSource("choke").setData(scan.chokepoints);
   selected = null;
@@ -835,7 +835,20 @@ function exitFire(restoreSelection = true) {
 // Drag = visual only (local snap preview, no request, no state change). Release = ONE request. Every drop, drag start,
 // reset, selection change, area switch, scenario entry and mitigation start bumps probeGen; a response is applied only
 // if it is still the newest request for the same area + neighbourhood in vulnerability mode.
-let probe = null, probeGen = 0, probeState = "none", probeMsg = "", drag = null, roadsData = null;
+let probe = null, probeGen = 0, probeState = "none", probeMsg = "", drag = null;
+let probeRoads = null;       // {area, nid, data}: the server's eligible roads for the selected neighbourhood (preview only)
+let previewN = 0;            // features currently in the preview source (mirrors setPreview)
+function setPreview(data) { previewN = data.features.length; map.getSource("probe-preview").setData(data); }
+// fetched on selection (never during a drag); the preview suggests only positions the server will accept
+async function loadProbeRoads(area, nid) {
+  probeRoads = null;
+  try {
+    const r = await fetch(`/api/${area}/nb/${nid}/probe-roads`);
+    if (!r.ok) return;
+    const data = await r.json();
+    if (current === area && selected === nid) probeRoads = { area, nid, data };
+  } catch { /* preview falls back to the neighbourhood's own streets (a subset of the eligible set) */ }
+}
 const PROBE_SNAP_M = 60;                              // same tolerance as the server (egress/probe.py SNAP_TOL_M)
 function probeShown() { return !!(probe && probe.area === current && probe.nid === selected && !floodOn && !fireOn); }
 function selProps() {
@@ -919,11 +932,11 @@ function endDragListeners() {
   map.off("mousemove", onProbeMove); document.removeEventListener("mouseup", onProbeUp, true);
   document.removeEventListener("keydown", onProbeKey, true);
   map.dragPan.enable(); map.getCanvas().style.cursor = "";
-  map.getSource("probe-preview").setData(empty);
 }
 function clearProbe() {       // reset to the worst sampled blockage; invalidates any drag or pending request
   probeGen++;
   endDragListeners(); drag = null;
+  setPreview(empty);          // always: also covers a pending calculation (no drag active)
   const had = probe !== null;
   probe = null; probeState = "none"; probeMsg = "";
   if (!scanData) return;
@@ -933,10 +946,11 @@ function clearProbe() {       // reset to the worst sampled blockage; invalidate
 function onProbeKey(e) { if (e.key === "Escape") onProbeUp(null); }
 function onProbeMove(e) {
   if (!drag || drag.area !== current || drag.nid !== selected || !canProbe()) return onProbeUp(null);
+  drag.cursor = [e.lngLat.lng, e.lngLat.lat];          // the raw cursor: what is sent on release
   const s = snapPreview(e.lngLat);
   drag.far = !s || s.d > PROBE_SNAP_M;
-  if (!drag.far) drag.pos = s.ll;
-  map.getSource("probe-preview").setData(discAt(drag.pos));
+  if (!drag.far) drag.pos = s.ll;                      // preview suggestion only
+  setPreview(discAt(drag.pos));
   renderProbeCard();
 }
 function onProbeUp(e) {
@@ -944,13 +958,13 @@ function onProbeUp(e) {
   const d = drag;
   endDragListeners(); drag = null;
   const valid = d.area === current && d.nid === selected && canProbe();
-  if (!valid) { probeState = probeShown() ? "done" : "none"; renderBlockage(); return; }
-  if (e === null || d.far || !d.moved) {               // cancelled, off the network, or a click without a drag
-    probeMsg = d.far ? `No road within ${PROBE_SNAP_M} m: the blockage went back to where it was.` : "";
-    probeState = probeShown() ? "done" : (probeMsg ? "rejected" : "none");
+  if (!valid) { setPreview(empty); probeState = probeShown() ? "done" : "none"; renderBlockage(); return; }
+  if (e === null || !d.moved || !d.cursor) {           // cancelled (Esc) or a click without a drag: nothing to test
+    setPreview(empty); probeMsg = ""; probeState = probeShown() ? "done" : "none";
     renderBlockage(); return;
   }
-  runProbe(d.pos);
+  // the server is the single authority: it receives the RAW cursor and decides eligibility, tolerance and the centre
+  runProbe(d.cursor, d.far ? null : d.pos);
 }
 function startProbeDrag(e) {
   if (drag || !canProbe()) return;
@@ -971,24 +985,24 @@ function startProbeDrag(e) {
     if (Math.max(ax, bx) >= x0 && Math.min(ax, bx) <= x1 && Math.max(ay, by) >= y0 && Math.min(ay, by) <= y1) segs.push([ax, ay, bx, by]);
   } };
   const addGeom = (g) => g.type === "LineString" ? addLine(g.coordinates) : g.type === "MultiLineString" ? g.coordinates.forEach(addLine) : null;
-  if (street) addGeom(street.geometry);
-  if (roadsData) roadsData.features.forEach((r) => addGeom(r.geometry));
-  drag = { area: current, nid: selected, pos: c, far: false, moved: false, o, frame, segs };
+  if (probeRoads && probeRoads.area === current && probeRoads.nid === selected) probeRoads.data.features.forEach((r) => addGeom(r.geometry));
+  else if (street) addGeom(street.geometry);           // fallback: own streets only (never wider than the server's set)
+  drag = { area: current, nid: selected, pos: c, cursor: null, far: false, moved: false, o, frame, segs };
   probeState = "dragging"; probeMsg = "";
   map.dragPan.disable(); map.getCanvas().style.cursor = "grabbing";
   map.getSource("blk-hit").setData(empty);
-  map.getSource("probe-preview").setData(discAt(c));
+  setPreview(discAt(c));
   map.on("mousemove", onProbeMove);
   map.once("mousemove", () => { if (drag) drag.moved = true; });
   document.addEventListener("mouseup", onProbeUp, true);
   document.addEventListener("keydown", onProbeKey, true);
   renderProbeCard();
 }
-async function runProbe(ll) {
+async function runProbe(ll, previewAt) {          // ll = raw release point; previewAt = suggested spot to show meanwhile
   const gen = ++probeGen, area = current, nid = selected;
   const valid = () => gen === probeGen && current === area && selected === nid && !floodOn && !fireOn;
   probeState = "pending"; probeMsg = "";
-  map.getSource("probe-preview").setData(discAt(ll));  // the circle stays where it was released while testing
+  setPreview(previewAt ? discAt(previewAt) : empty);
   renderProbeCard();
   let d;
   try {
@@ -997,8 +1011,8 @@ async function runProbe(ll) {
     if (!r.ok) throw new Error(`server replied ${r.status}`);
     d = await r.json();
   } catch (err) { d = { ok: false, message: `Couldn't test this blockage (${err.message}).` }; }
-  if (!valid()) return;                                // superseded: touch nothing
-  map.getSource("probe-preview").setData(empty);
+  if (!valid()) return;                                // superseded: touch nothing (clearProbe already cleared)
+  setPreview(empty);                                   // the authoritative circle comes from the response
   if (!d.ok) { probeMsg = `${d.message} The blockage went back to where it was.`; probeState = probeShown() ? "done" : "rejected"; renderBlockage(); return; }
   probe = { area, nid, data: d }; probeState = "done";
   renderBlockage();
@@ -1168,7 +1182,10 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
     return f ? f.geometry.coordinates : null;
   },
   blockedFilter: () => map.getFilter("blocked"),
-  probeDrop: (lon, lat) => runProbe([lon, lat]),
+  probeDrop: (lon, lat) => runProbe([lon, lat], [lon, lat]),
+  probeDragMove: (lon, lat) => { if (drag) { drag.moved = true; onProbeMove({ lngLat: { lng: lon, lat } }); } },
+  previewFeatures: async () => (await map.getSource("probe-preview").getData()).features.length,
+  previewN: () => previewN,
   probeDragStart() { const c = blockageCentre(); if (c) startProbeDrag({ preventDefault() {}, lngLat: { lng: c[0], lat: c[1] } }); return !!drag; },
   probeDragEnd: (cancel) => onProbeUp(cancel ? null : {}),
   probeReset: () => clearProbe(),
@@ -1176,7 +1193,8 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
     centre: probe ? probe.data.centre : null, cut: probe ? [probe.data.cut_osm, probe.data.cut_ms] : null,
     card: $("probeCard").textContent.replace(/\s+/g, " ").trim(), badge: $("blkBadge").textContent,
     blocked: map.getFilter("blocked"), cut_filter: map.getFilter("cut"), dragPan: map.dragPan.isEnabled(),
-    probeFeatures: probeShown() ? probe.data.geo.features.length : 0 }),
+    probeFeatures: probeShown() ? probe.data.geo.features.length : 0, counts: probe ? probe.data.counts : null }),
+  topNid: () => { const f = scanData.neighbourhoods.features.find((x) => x.properties.rank === 1); return f ? f.id : null; },
   view: (v, animate = true) => setView(v, animate), viewState: () => ({ view, pitch: map.getPitch(), bearing: map.getBearing(),
     vis3d: map.getLayoutProperty("bld-3d", "visibility"), vis2d: map.getLayoutProperty("bld-fill", "visibility"),
     noteHidden: $("viewNote").classList.contains("hidden") }),

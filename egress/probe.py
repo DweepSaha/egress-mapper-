@@ -4,9 +4,10 @@ The vulnerability scan scores every 50 m sample point with engine.evaluate_block
 that same function once, at a road position the user chose, with the same frozen 50 m radius; building categories come
 from viz.categories, which also calls evaluate_block. The only logic here is choosing the position:
 
-  * eligible positions = road within BLOCK_RADIUS_M of the neighbourhood's roads or its connections to major roads —
-    the same region the scan searches (engine._worst: sample points "dwithin" that geometry);
-  * the release point snaps to the nearest eligible road position, if that is within SNAP_TOL_M; otherwise rejected.
+  * eligible positions = the neighbourhood's OWN roads plus its connections to major roads (the major-road stretch
+    within BLOCK_RADIUS_M of each of its gateways). Roads of other neighbourhoods are never eligible, even when close;
+  * the release point (the raw cursor position) snaps to the nearest eligible road position, if that is within
+    SNAP_TOL_M; otherwise it is rejected. This is the ONLY analytical snap (the browser preview is a suggestion).
 
 A probe result is never a scan result: it is labelled as the user's placed blockage and never changes the scan,
 the ranking or the neighbourhood's classification.
@@ -33,13 +34,31 @@ def _nb(area: engine.Area, nid: int) -> engine.Neighbourhood:
     return _NBS[key][nid]
 
 
-def _region(area: engine.Area, nb: engine.Neighbourhood):
-    """The scan's search region for this neighbourhood (see engine._worst) and the road lines inside it."""
-    reach = shapely.union_all([area.edges[i].line for i in nb.edge_idx] + [Point(area.node_xy[g]) for g in nb.gateways])
-    region = reach.buffer(engine.BLOCK_RADIUS_M)
-    idx = area.edge_tree.query(region, predicate="intersects")
-    roads = shapely.union_all([area.edges[int(i)].line.intersection(region) for i in idx])
-    return region, roads
+_ELIG: dict = {}
+
+
+def eligible_roads(area: engine.Area, nb: engine.Neighbourhood):
+    """Where a probe may be placed: the neighbourhood's own roads, plus each of its connections to a major road (the
+    major-road edges meeting one of its gateways, within BLOCK_RADIUS_M of that gateway). Nothing else."""
+    key = (area.name, id(area), nb.nid)
+    if key not in _ELIG:
+        lines = [area.edges[i].line for i in nb.edge_idx]
+        for g in nb.gateways:
+            disc = Point(area.node_xy[g]).buffer(engine.BLOCK_RADIUS_M)
+            for i in area.edge_tree.query(disc, predicate="intersects"):
+                e = area.edges[int(i)]
+                if e.exit and g in (e.u, e.v):
+                    lines.append(e.line.intersection(disc))
+        _ELIG[key] = shapely.union_all(lines)
+    return _ELIG[key]
+
+
+def eligible_geojson(area: engine.Area, result: dict) -> dict:
+    """The eligible roads in lon/lat, so the browser preview uses the same set the server enforces."""
+    if result["status"] == "not_assessed":
+        return dict(type="FeatureCollection", features=[])
+    g = transform(engine._TO_LL, eligible_roads(area, _nb(area, result["nid"])))
+    return dict(type="FeatureCollection", features=[dict(type="Feature", properties={}, geometry=mapping(g))])
 
 
 def probe(area: engine.Area, result: dict, lon: float, lat: float) -> dict:
@@ -48,7 +67,7 @@ def probe(area: engine.Area, result: dict, lon: float, lat: float) -> dict:
         return dict(ok=False, reason="not_assessed", message="This neighbourhood is not assessed (edge of road data).")
     nb = _nb(area, result["nid"])
     p = Point(engine._TO_M(lon, lat))
-    region, roads = _region(area, nb)
+    roads = eligible_roads(area, nb)
     if roads.is_empty:
         return dict(ok=False, reason="no_road", message="No road here to block.")
     snapped = nearest_points(roads, p)[0]

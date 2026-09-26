@@ -13,6 +13,7 @@ const infoDelays = [];    // ... to /flood/info responses
 const bldDelays = [];     // ... to /buildings/ footprint responses
 const fireDelays = [];    // ... to /fire/ scenario responses
 const probeDelays = [];   // ... to /probe responses (user-placed blockage)
+const probeBodies = [];   // request bodies sent to /probe (the raw release point)
 let apiCalls = 0;         // every /api/ request (the 3D suite asserts that toggling 2D/3D makes none)
 window.fetch = async (url, opts) => {
   if (String(url).includes("/api/")) apiCalls++;
@@ -24,7 +25,8 @@ window.fetch = async (url, opts) => {
       return resp;
     }
   }
-  if (String(url).includes("/probe")) {
+  if (String(url).includes("/probe") && !String(url).includes("/probe-roads")) {
+    probeBodies.push(JSON.parse(opts.body));
     const d = probeDelays.length ? probeDelays.shift() : 0;
     const resp = await realFetch(url, opts);
     await sleep(d);
@@ -309,8 +311,9 @@ async function probeSuite() {
 
   await app.probeDrop(...WORST); await done();
   const s1 = P();
-  record("P1 placing it at the worst sampled centre reproduces 234/194, labelled as 'blockage you placed'",
+  record("P1 placing it at the worst sampled centre reproduces 234/194 lose, 0/0 inside, 517/486 retain, labelled 'blockage you placed'",
     s1.shown && s1.cut[0] === 234 && s1.cut[1] === 194 && s1.card.includes("Blockage you placed") &&
+    JSON.stringify(s1.counts) === JSON.stringify({ cut: { osm: 234, ms: 194 }, inside: { osm: 0, ms: 0 }, retain: { osm: 517, ms: 486 } }) &&
     s1.badge === "Map shows: blockage you placed" && JSON.stringify(s1.blocked) === off && panel() === panel0, s1);
 
   await app.probeDrop(...OTHER); await done();
@@ -368,6 +371,58 @@ async function probeSuite() {
   app.unfire(); await sleep(300);
   record("P8 entering a scenario drops the placed blockage (vulnerability-only tool)", !s8.shown && s8.probeFeatures === 0, s8);
   app.probeReset();
+
+  // ---- Codex fix 2: exactly one authoritative snap - the RAW release point is sent, never the preview's snap
+  app.select(99); await sleep(1500);
+  const RAW_NEAR = [-63.88573, 44.73359];                // ~8 m off a Westwood street
+  probeBodies.length = 0;
+  app.probeDragStart(); app.probeDragMove(...RAW_NEAR); app.probeDragEnd(false); await done();
+  const r1 = P();
+  record("S1 release sends the raw cursor; the server's snapped centre is what is shown",
+    probeBodies.length === 1 && probeBodies[0].lon === RAW_NEAR[0] && probeBodies[0].lat === RAW_NEAR[1] && r1.shown &&
+    JSON.stringify(r1.centre) !== JSON.stringify(RAW_NEAR), { body: probeBodies[0], centre: r1.centre });
+  probeBodies.length = 0;
+  app.probeDragStart(); app.probeDragMove(...FAR); app.probeDragEnd(false); await done();
+  const r2 = P();
+  record("S2 raw cursor far from every eligible road: sent as-is, rejected by the server, previous blockage kept",
+    probeBodies.length === 1 && probeBodies[0].lon === FAR[0] && r2.msg.includes("went back") && r2.shown &&
+    JSON.stringify(r2.centre) === JSON.stringify(r1.centre) && app.previewN() === 0, { body: probeBodies[0], r2 });
+  app.probeReset();
+
+  // ---- Codex fix 3: preview geometry cleared unconditionally (asserted on the real preview source)
+  const pendingThen = async (name, interrupt) => {
+    await app.loadArea("tantallon"); app.select(99); await sleep(1200);
+    probeDelays.push(1500);
+    const pr = app.probeDrop(...OTHER); await sleep(150);
+    const during = await app.previewFeatures();
+    await interrupt();
+    const now = await app.previewFeatures(), nowN = app.previewN();
+    await pr; await sleep(300);
+    const after = await app.previewFeatures(), info = P();
+    record(`C ${name}: preview cleared immediately and stays cleared after the late answer`,
+      during > 0 && now === 0 && nowN === 0 && after === 0 && app.previewN() === 0 && !info.shown && info.probeFeatures === 0,
+      { during, now, after, state: info.state });
+  };
+  await pendingThen("pending -> Reset", async () => app.probeReset());
+  await pendingThen("pending -> selection change", async () => app.select(58));
+  await pendingThen("pending -> area change", async () => { await app.loadArea("fredericton"); });
+  await pendingThen("pending -> fire scenario", async () => { app.fire("hist"); await sleep(100); });
+  app.unfire();
+  await pendingThen("pending -> mitigation start", async () => document.getElementById("drawBtn").click());
+  app.clear();
+  // flood: a Fredericton neighbourhood with a pending placed blockage, then the flood scenario
+  await app.loadArea("fredericton"); const fnid = app.topNid(); app.select(fnid); await sleep(1500);
+  const fc = app.selectedChoke();
+  probeDelays.push(1500);
+  const pf = app.probeDrop(...fc); await sleep(150);
+  const fDuring = await app.previewFeatures();
+  await app.flood(8.36);
+  const fNow = await app.previewFeatures();
+  await pf; await sleep(300);
+  const fAfter = await app.previewFeatures();
+  record("C pending -> flood scenario: preview cleared immediately and stays cleared",
+    fDuring > 0 && fNow === 0 && fAfter === 0 && !P().shown, { fDuring, fNow, fAfter });
+  app.unflood();
 }
 
 async function main() {
