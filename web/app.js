@@ -524,15 +524,15 @@ const stat = (cls, label, c) => `<div class="fs ${cls}"><span class="n">${Math.m
 const FIRE_KEY = `<div class="firekey">
   <div><span class="k zone"></span>Supplied affected area</div>
   <div><span class="k road"></span>Road portions within the supplied affected area</div>
-  <div><span class="k inside"></span>Mapped building, centre inside the area</div>
-  <div><span class="k cut"></span>Outside the area, loses access to a major road (buildings and roads)</div>
-  <div><span class="k retain"></span>Keeps access</div></div>`;
+  <div><span class="k cut"></span>Outside the area but loses access (buildings and roads)</div>
+  <div><span class="k inside"></span>Building centre inside the supplied area</div>
+  <div><span class="k retain"></span>Retains access</div></div>`;
 
 function fireHtml(s) {
   const c = s.counts;
   const head = s.kind === "historical"
     ? `<div class="big">Mapped 2023 fire perimeter</div>
-       <div class="src">NBAC mapped area ${s.perimeter.mapped_ha} ha · fire starting ${s.perimeter.start_date}</div>`
+       <div class="src">Published NBAC area ${s.perimeter.mapped_ha} ha · fire starting ${s.perimeter.start_date}</div>`
     : `<div class="big">Supplied hypothetical affected area</div>
        <div class="src">Radius ${s.radius_m.toLocaleString()} m (${s.zone_ha} ha) · your input, not a predicted fire extent</div>`;
   const ents = s.kind === "historical"
@@ -544,7 +544,7 @@ function fireHtml(s) {
         <span class="l">road portions within the supplied affected area</span></div>
       ${stat("cut", "outside the area, lose access", c.lose_access)}
       ${stat("inside", "centre inside the area", c.inside)}
-      ${stat("retain", "keep access", c.keep_access)}
+      ${stat("retain", "retain access", c.keep_access)}
     </div>
     ${ents}
     <div class="nopredict">This tool does not predict fire spread.</div>
@@ -553,7 +553,9 @@ function fireHtml(s) {
       Roads are treated as impassable only within the supplied area; no wind, weather, fire behaviour, traffic or
       evacuation time is modelled. Buildings are classified by their centre. Access counts cover assessed
       neighbourhoods of 30+ mapped buildings (as in the vulnerability scan); the centre-inside count covers every
-      mapped building in the area.</details>`;
+      mapped building in the area.${s.kind === "historical" ? ` Area: the published NBAC figure (${s.perimeter.mapped_ha} ha)
+      is measured on the curved Earth; this tool measures the same outline on its flat map as ${s.zone_ha} ha
+      (about 0.1% larger from map distortion this far from New Brunswick). The outline is unchanged.` : ""}</details>`;
 }
 
 function renderFireKey() {
