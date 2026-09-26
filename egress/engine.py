@@ -234,9 +234,12 @@ def evaluate_block(area: Area, nb: Neighbourhood, centre: Point) -> dict:
 
     cut = {"osm": 0, "ms": 0}
     inside = {"osm": 0, "ms": 0}
+    cut_edges = set()
     for i in nb.edge_idx:
         e = area.edges[i]
         iv = blocked.get(i)
+        if iv is None and e.u not in reach and e.v not in reach:
+            cut_edges.add(i)   # the whole road segment has lost its way out (with or without homes on it)
         for src in ("osm", "ms"):
             t = e.homes_t[src]
             if not len(t):
@@ -252,7 +255,8 @@ def evaluate_block(area: Area, nb: Neighbourhood, centre: Point) -> dict:
                 cut[src] += int(before.sum())
             if e.v not in reach:
                 cut[src] += int(after.sum())
-    return dict(cut=max(cut.values()), cut_osm=cut["osm"], cut_ms=cut["ms"], inside=max(inside.values()))
+    return dict(cut=max(cut.values()), cut_osm=cut["osm"], cut_ms=cut["ms"], inside=max(inside.values()),
+                cut_edges=cut_edges)
 
 
 def sample_points(area: Area) -> list[Point]:
@@ -278,7 +282,7 @@ def scan(area: Area) -> list[dict]:
         footprint = shapely.union_all([l.buffer(40) for l in lines])   # display shape only
         # boundary rule applies to the roads themselves, not the 40 m display buffer
         assessed = area.assessable.contains(shapely.union_all(lines))
-        worst = dict(cut=0, cut_osm=0, cut_ms=0, inside=0)
+        worst = dict(cut=0, cut_osm=0, cut_ms=0, inside=0, cut_edges=set())
         worst_pt = None
         if assessed:
             reach_geom = shapely.union_all(lines + [Point(area.node_xy[g]) for g in nb.gateways])
@@ -291,22 +295,59 @@ def scan(area: Area) -> list[dict]:
         results.append(dict(nid=nb.nid, status=status, homes=nb.n_homes, homes_osm=nb.homes["osm"],
                             homes_ms=nb.homes["ms"], gateways=len(nb.gateways), worst_cut=worst["cut"],
                             worst_cut_osm=worst["cut_osm"], worst_cut_ms=worst["cut_ms"],
-                            worst_inside=worst["inside"], choke=worst_pt, geometry=footprint))
+                            worst_inside=worst["inside"], choke=worst_pt, geometry=footprint,
+                            cut_lines=shapely.union_all([area.edges[i].line for i in worst["cut_edges"]])
+                            if worst["cut_edges"] else None))
+    # rank the assessed neighbourhoods by homes that could be cut off (1 = worst)
+    ranked = sorted((r for r in results if r["worst_cut"] > 0), key=lambda r: -r["worst_cut"])
+    for k, r in enumerate(ranked, 1):
+        r["rank"] = k
+    for r in results:
+        r.setdefault("rank", None)
     return results
 
 
-def to_geojson(results: list[dict], path_nb, path_choke) -> None:
-    to_ll = Transformer.from_crs(config.ANALYSIS_CRS, "EPSG:4326", always_xy=True).transform
-    nb_feats, choke_feats = [], []
+_TO_LL = Transformer.from_crs(config.ANALYSIS_CRS, "EPSG:4326", always_xy=True).transform
+GEOM_KEYS = ("geometry", "choke", "cut_lines")
+
+
+def _fc(feats):
+    return dict(type="FeatureCollection", features=feats)
+
+
+def results_geojson(results: list[dict]) -> dict:
+    """Web-ready (lon/lat) feature collections: neighbourhoods, choke points (+ blocked circle), cut roads."""
+    nb, choke, circles, cut = [], [], [], []
     for r in results:
-        props = {k: v for k, v in r.items() if k not in ("geometry", "choke")}
-        nb_feats.append(dict(type="Feature", properties=props,
-                             geometry=mapping(transform(to_ll, r["geometry"].simplify(5)))))
+        props = {k: v for k, v in r.items() if k not in GEOM_KEYS}
+        nb.append(dict(type="Feature", id=r["nid"], properties=props,
+                       geometry=mapping(transform(_TO_LL, r["geometry"].simplify(5)))))
         if r["choke"] is not None:
-            choke_feats.append(dict(type="Feature", properties=dict(nid=r["nid"], status=r["status"],
-                                                                    worst_cut=r["worst_cut"],
-                                                                    radius_m=BLOCK_RADIUS_M),
-                                    geometry=mapping(transform(to_ll, r["choke"]))))
-    for path, feats in ((path_nb, nb_feats), (path_choke, choke_feats)):
+            p = dict(nid=r["nid"], status=r["status"], worst_cut=r["worst_cut"], rank=r["rank"],
+                     radius_m=BLOCK_RADIUS_M)
+            choke.append(dict(type="Feature", properties=p, geometry=mapping(transform(_TO_LL, r["choke"]))))
+            circles.append(dict(type="Feature", properties=p,
+                                geometry=mapping(transform(_TO_LL, r["choke"].buffer(BLOCK_RADIUS_M, 24)))))
+        if r["cut_lines"] is not None:
+            cut.append(dict(type="Feature", properties=dict(nid=r["nid"]),
+                            geometry=mapping(transform(_TO_LL, r["cut_lines"]))))
+    return dict(neighbourhoods=_fc(nb), chokepoints=_fc(choke), blocked=_fc(circles), cut_roads=_fc(cut))
+
+
+def roads_geojson(area: Area) -> dict:
+    return _fc([dict(type="Feature", properties=dict(way_out=e.exit),
+                     geometry=mapping(transform(_TO_LL, e.line.simplify(2)))) for e in area.edges])
+
+
+def boundary_geojson(area: Area) -> dict:
+    """The not-assessed band: study box minus the assessable interior."""
+    study = area.assessable.buffer(BOUNDARY_BUFFER_M, join_style="mitre")
+    return _fc([dict(type="Feature", properties={},
+                     geometry=mapping(transform(_TO_LL, study.difference(area.assessable))))])
+
+
+def to_geojson(results: list[dict], path_nb, path_choke) -> None:
+    g = results_geojson(results)
+    for path, fc in ((path_nb, g["neighbourhoods"]), (path_choke, g["chokepoints"])):
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(dict(type="FeatureCollection", features=feats)), encoding="utf-8")
+        path.write_text(json.dumps(fc), encoding="utf-8")

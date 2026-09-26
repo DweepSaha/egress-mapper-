@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Egress mapper</title>
+<link rel="stylesheet" href="/vendor/maplibre-gl-6.11.2/maplibre-gl.css">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="map"></div>
+<aside id="side">
+  <h1>Egress mapper</h1>
+  <p class="lede">Neighbourhoods where one blocked road area could cut many homes off from a major road.</p>
+  <div id="areas"></div>
+  <div id="legend">
+    <div><span class="sw red"></span>One blocked area cuts off 30+ homes</div>
+    <div><span class="sw amber"></span>One blocked area cuts off 1–29 homes</div>
+    <div><span class="sw green"></span>No single blocked area cuts anyone off</div>
+    <div><span class="sw grey"></span>Not assessed (edge of road data)</div>
+    <div class="note">Stronger red = more homes could be cut off. Only neighbourhoods with 30+ homes are shown.</div>
+  </div>
+  <div id="panel" class="card hidden"></div>
+  <h2>Largest single choke points</h2>
+  <ol id="ranking"></ol>
+  <p class="fine">Blocked area: a circle 100 m across, tested every 50 m along the roads. The blockage is a
+    hypothetical input — this tool does not predict hazards, traffic or evacuation times.</p>
+</aside>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+:root { --bg: #0b0d10; --panel: rgba(16, 19, 24, .94); --fg: #dfe4ea; --muted: #8b95a1;
+        --red: #e0524a; --amber: #e0a526; --green: #3fb27f; --grey: #6b7280; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+             font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+#map { position: absolute; inset: 0; background: var(--bg); }
+#side { position: absolute; top: 12px; left: 12px; bottom: 12px; width: 330px; overflow-y: auto; z-index: 2;
+        background: var(--panel); border-radius: 10px; padding: 14px 16px; box-sizing: border-box; }
+h1 { font-size: 18px; margin: 0 0 4px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 16px 0 6px; }
+.lede { margin: 0 0 12px; color: var(--muted); }
+#areas { display: flex; gap: 6px; margin-bottom: 12px; }
+#areas button { flex: 1; padding: 7px 6px; border-radius: 6px; border: 1px solid #2b323b; background: #161a20;
+                color: var(--fg); font: inherit; cursor: pointer; }
+#areas button.on { border-color: #8fb3d9; background: #1d2a38; }
+#legend div { display: flex; align-items: center; gap: 8px; margin: 3px 0; font-size: 13px; }
+#legend .note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+.sw.red { background: var(--red); } .sw.amber { background: var(--amber); }
+.sw.green { background: var(--green); } .sw.grey { background: var(--grey); }
+.card { margin-top: 14px; padding: 12px; border-radius: 8px; background: #161a20; border-left: 4px solid var(--grey); }
+.card.red { border-left-color: var(--red); } .card.amber { border-left-color: var(--amber); }
+.card.green { border-left-color: var(--green); }
+.card .big { font-size: 20px; font-weight: 600; }
+.card .cut { font-size: 15px; margin: 6px 0; }
+.card .src, .fine { color: var(--muted); font-size: 12px; }
+.hidden { display: none; }
+#ranking { margin: 0; padding-left: 22px; }
+#ranking li { cursor: pointer; margin: 3px 0; }
+#ranking li:hover { color: #fff; text-decoration: underline; }
+#ranking .n { color: var(--red); font-weight: 600; }
