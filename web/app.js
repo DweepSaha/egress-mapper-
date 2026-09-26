@@ -39,6 +39,11 @@ map.addSource("cut", { type: "geojson", data: empty });
 map.addSource("blocked", { type: "geojson", data: empty });
 map.addSource("choke", { type: "geojson", data: empty });
 
+// Mapped water (OSM water/riverbank/reservoir): geographic context only, never used by any calculation. Subdued and
+// desaturated so the flood scenario's supplied inundation (bright blue, drawn above) is always distinguishable.
+map.addSource("water", { type: "geojson", data: empty, attribution: OSM });
+map.addLayer({ id: "water", type: "fill", source: "water", paint: { "fill-color": "#1a2c3d", "fill-opacity": 0.95 } });
+map.addLayer({ id: "water-line", type: "line", source: "water", paint: { "line-color": "#2a4258", "line-width": 0.6 } });
 map.addLayer({ id: "boundary", type: "fill", source: "boundary", paint: { "fill-color": "#6b7280", "fill-opacity": 0.18 } });
 // invisible click targets (the neighbourhood's area); status is drawn on the street lines below
 map.addLayer({ id: "nb-fill", type: "fill", source: "nb", paint: { "fill-color": "#000", "fill-opacity": 0 } });
@@ -101,12 +106,14 @@ for (const s of ["fl-water", "fl-roads", "fl-cut", "fl-cover"]) map.addSource(s,
 map.addLayer({ id: "fl-cover", type: "line", source: "fl-cover", layout: { visibility: "none" },
   paint: { "line-color": "#93c5fd", "line-width": 1.2, "line-dasharray": [3, 2], "line-opacity": 0.7 } }, "bld-fill");
 map.addLayer({ id: "fl-water", type: "fill", source: "fl-water", layout: { visibility: "none" },
-  paint: { "fill-color": "#2563eb", "fill-opacity": 0.4 } }, "bld-fill");
+  paint: { "fill-color": "#3b82f6", "fill-opacity": 0.55 } }, "bld-fill");
+map.addLayer({ id: "fl-water-line", type: "line", source: "fl-water", layout: { visibility: "none" },
+  paint: { "line-color": "#93c5fd", "line-width": 1.2, "line-opacity": 0.9 } }, "bld-fill");
 map.addLayer({ id: "fl-cut", type: "line", source: "fl-cut", layout: { visibility: "none" },
   paint: { "line-color": "#ff7a45", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4.5] } });
 map.addLayer({ id: "fl-roads", type: "line", source: "fl-roads", layout: { visibility: "none", "line-cap": "round" },
   paint: { "line-color": "#22d3ee", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 6] } });
-const FLOOD_LAYERS = ["fl-cover", "fl-water", "fl-cut", "fl-roads"];
+const FLOOD_LAYERS = ["fl-cover", "fl-water", "fl-water-line", "fl-cut", "fl-roads"];
 const SCAN_OVERLAYS = ["choke", "blocked", "cut"];   // hidden while the flood scenario is shown, restored after
 const STREET_OPACITY = map.getPaintProperty("streets", "line-opacity");
 // fire scenario layers (Tantallon only; hidden unless the fire scenario is active)
@@ -338,6 +345,7 @@ async function loadArea(name) {
   map.removeFeatureState({ source: "bld" }); bldStateN = 0;
   bldGen++; bldAppliedNs = null;                 // any in-flight footprint load for the old area becomes stale
   map.getSource("bld").setData(empty); bldShown = { area: null, src: null, ready: false };
+  map.getSource("water").setData(empty);
   current = name;
   syncMode();
   if (typeof clearMitigation === "function") clearMitigation();
@@ -347,6 +355,8 @@ async function loadArea(name) {
   if (current !== name) return;
   scanData = scan;
   loadBuildings(name, "osm");   // subtle background footprints; loads after the roads, never blocks them
+  fetch(`/api/${name}/water`).then((r) => r.json())
+    .then((w) => { if (current === name) map.getSource("water").setData(w); }).catch(() => {});   // context only
   map.getSource("roads").setData(roads);
   map.getSource("boundary").setData(boundary);
   map.getSource("nb").setData(scan.neighbourhoods);
@@ -497,6 +507,8 @@ function floodHtml(s) {
   return `<div class="kicker">Flood scenario</div>
     <div class="nopredict">This is not a flood prediction.</div>
     <div class="fine">Supplied river level ${s.gauge_m.toFixed(2)} m (gauge)</div>
+    <div class="wkey"><span><span class="sw inund"></span>Supplied inundation (this scenario)</span>
+      <span><span class="sw water"></span>Mapped water (context only)</span></div>
     <div class="mgrid2">
       ${metric(`${s.gauge_m.toFixed(2)} m`, "supplied gauge level (CGVD28, station 01AK003)", "flood")}
       ${metric(`~${s.water_cgvd2013_m.toFixed(2)} m`, "project CGVD2013 conversion", "flood", `offset ${s.offset_m} m`)}
@@ -600,7 +612,7 @@ async function enterFlood(g) {
 function exitFlood(restoreSelection = true) {
   floodGen++; floodAct++;                       // invalidate pending scenario requests AND initializations
   floodOn = false; floodData = null; coverInstalled = false;
-  FLOOD_LAYERS.filter((l) => l !== "fl-cover").forEach((l) => map.getSource(l).setData(empty));
+  ["fl-water", "fl-roads", "fl-cut"].forEach((l) => map.getSource(l).setData(empty));
   FLOOD_LAYERS.forEach((l) => map.setLayoutProperty(l, "visibility", "none"));
   SCAN_OVERLAYS.forEach((l) => map.setLayoutProperty(l, "visibility", "visible"));
   map.setPaintProperty("streets", "line-opacity", STREET_OPACITY);

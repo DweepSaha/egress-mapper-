@@ -7,7 +7,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, engine, fire, flood, viz
+from . import config, context, engine, fire, flood, viz
 
 AREAS = {
     "tantallon": dict(label="Upper Tantallon, NS", center=[-63.862, 44.715], zoom=13.2),
@@ -36,6 +36,7 @@ async def lifespan(app: FastAPI):
         get(name)
         for src in engine.SOURCES:
             viz.footprints(get(name)["area"], src)   # also verifies footprint ids match engine building ids
+        context.water_geojson(name)
     yield
 
 
@@ -74,6 +75,13 @@ def buildings(area: str, src: str):
     if src not in engine.SOURCES:
         raise HTTPException(404, "source must be osm or ms")
     return Response(viz.footprints(get(area)["area"], src), media_type="application/json")
+
+
+@app.get("/api/{area}/water")
+def water(area: str):
+    """Mapped open water (OSM water/riverbank/reservoir) in the study box. Geographic context only: never analysed."""
+    get(area)
+    return Response(context.water_geojson(area), media_type="application/json")
 
 
 @app.get("/api/{area}/nb/{nid}/buildings")
