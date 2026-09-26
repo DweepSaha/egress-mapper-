@@ -56,6 +56,36 @@ def test_isolated_depression_stays_dry():
     assert water.intersection(cell(5, 3)).area > 0.99 * 100 * 100
 
 
+def test_diagonal_corner_contact_does_not_connect():
+    """Codex finding 2: a 2x2 raster where the only contact between the seed cell and a low cell is a shared corner.
+    4-neighbour connectivity means the diagonal cell must stay dry (old code flooded it: 25 m2)."""
+    tr5 = Affine(5, 0, 0, 0, -5, 10)
+    dem = np.array([[0.5, 20.0], [20.0, 0.5]], dtype="float32")
+    seed = box(0, 5, 5, 10)                                   # the top-left cell
+    water = flood.connected_water(dem, ND, tr5, 5.0, seed)
+    assert water.intersection(box(5, 0, 10, 5)).area == 0, water.intersection(box(5, 0, 10, 5)).area
+    assert abs(water.area - 25) < 1e-6, water.area
+
+
+def test_access_counts_only_scan_eligible_neighbourhoods():
+    """Codex finding 1: a 1-building neighbourhood (excluded from the scan by the 30+ threshold) cut off by water must
+    not be counted as losing access; a 30-building one must be. "Inside" keeps its wider physical scope."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import test_engine as T
+    from egress import engine
+    from shapely.geometry import Point as P
+    node_xy, roads = T.arterial([-500, 4000, 6000, 10500])        # 101 = G1, 102 = G2
+    node_xy.update({1: (4000, 5600), 2: (6000, 5600)})
+    roads += [(101, 1, None, "residential"), (102, 2, None, "residential")]
+    osm = [(4020, 5300)] + [(6020, 5220 + 10 * k) for k in range(30)] + [(6000, 5100)]   # last one inside the water
+    area = engine.build_area("t", roads, node_xy, T.STUDY, {"osm": T.pts(osm), "ms": T.pts([])})
+    water = box(3900, 5050, 4100, 5150).union(box(5900, 5050, 6100, 5150))   # cuts both roads near their junctions
+    a = flood.access_under_water(area, water, frozenset())
+    assert a["cut"]["osm"] == set(range(1, 31)), sorted(a["cut"]["osm"])     # the 30-building road only
+    assert 0 not in a["cut"]["osm"] and 0 not in a["retain"]["osm"]          # 1-building road: not counted at all
+    assert a["inside"]["osm"] == {31}, a["inside"]["osm"]                    # physical scope: counted regardless
+
+
 def test_valid_mask_excludes_nodata_and_nonfinite():
     dem = np.array([[1.0, ND, np.nan, np.inf]], dtype="float32")
     assert flood.valid_mask(dem, ND).tolist() == [[True, False, False, False]]

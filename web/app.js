@@ -99,7 +99,8 @@ const STREET_OPACITY = map.getPaintProperty("streets", "line-opacity");
 
 let current = null, scanData = null, selected = null;
 let drawing = false, clicks = [];
-let floodOn = false, floodGen = 0, floodData = null, floodInfo = null, floodSavedSel = null, bldStateN = 0;
+let floodOn = false, floodGen = 0, floodData = null, floodInfo = null, floodSavedSel = null, floodSavedBld = null;
+let bldStateN = 0, coverFeatures = 0;
 
 function panelHtml(p) {
   const src = `Count: the higher of OpenStreetMap (${p.homes_osm}) and Microsoft (${p.homes_ms}) building footprints.`;
@@ -138,20 +139,23 @@ function select(nid) {
 
 // ---------- mapped building footprints ----------
 const SRC_LABEL = { osm: "OpenStreetMap", ms: "Microsoft" };
-let bldShown = { area: null, src: null }, bldCats = null, bldPinned = null;
+let bldShown = { area: null, src: null, ready: false }, bldCats = null, bldPinned = null;
 
 async function loadBuildings(area, src) {
   if (bldShown.area === area && bldShown.src === src) return;
-  bldShown = { area, src };
+  bldShown = { area, src, ready: false };      // categories wait until THIS source's polygons are on the map
+  map.removeFeatureState({ source: "bld" }); bldStateN = 0;
   const data = await (await fetch(`/api/${area}/buildings/${src}`)).json();
   if (bldShown.area !== area || bldShown.src !== src) return;      // superseded
   map.getSource("bld").setData(data);
+  bldShown.ready = true;
   applyBuildingCats();
 }
 
 function applyBuildingCats() {
   map.removeFeatureState({ source: "bld" });
   bldStateN = 0;
+  if (!bldShown.ready) return;                 // never paint one source's ids onto the other source's polygons
   // the flood scenario and the selected-neighbourhood view never mix: one or the other drives the categories
   const cats = floodOn ? (floodData && floodData.area === bldShown.area ? floodData.ids[bldShown.src] : null)
                        : (bldCats && bldCats.area === bldShown.area ? bldCats.sources[bldShown.src] : null);
@@ -205,6 +209,10 @@ function renderRanking() {
 
 async function loadArea(name) {
   if (floodOn) exitFlood(false);          // switching areas always clears the flood scenario
+  // clear the old area's building categories and footprints NOW, not when the new footprints arrive
+  bldCats = null; bldPinned = null;
+  map.removeFeatureState({ source: "bld" }); bldStateN = 0;
+  map.getSource("bld").setData(empty); bldShown = { area: null, src: null, ready: false };
   current = name;
   document.getElementById("floodBox").classList.toggle("hidden", name !== "fredericton");
   if (typeof clearMitigation === "function") clearMitigation();
@@ -213,7 +221,6 @@ async function loadArea(name) {
     ["scan", "roads", "boundary"].map((k) => fetch(`/api/${name}/${k}`).then((r) => r.json())));
   if (current !== name) return;
   scanData = scan;
-  bldCats = null; bldPinned = null;
   loadBuildings(name, "osm");   // subtle background footprints; loads after the roads, never blocks them
   map.getSource("roads").setData(roads);
   map.getSource("boundary").setData(boundary);
@@ -346,12 +353,15 @@ function floodHtml(s) {
     <div class="cut">Mapped buildings with the building centre inside the supplied inundation area: <b>${fmt(c.inside)}</b> (violet).</div>
     <div class="cut">Mapped buildings that keep access: ${fmt(c.keep_access)} (teal).</div>
     <div class="src">Building status is classified by its centre; buildings along the water's edge may partially overlap
-      the inundation area.</div>
+      the inundation area. Access counts cover assessed neighbourhoods of 30+ mapped buildings (as in the vulnerability
+      scan); the "centre inside" count covers every mapped building in the water area.</div>
     <div class="src">This is not a flood prediction. The river level is your input; the water is a flat surface at
       ${s.water_cgvd2013_m.toFixed(2)} m (CGVD2013) connected to the river channel — no river slope, flood defences or
       drainage. Elevation data covers the river corridor only (dashed outline); roads outside it are treated as dry.
-      Bridges are treated as passable. Gauge height is converted with ${s.offset_m} m (NRCan). The vulnerability
-      classification is not changed by this scenario.</div>`;
+      Bridges are treated as passable. Gauge height is converted with ${s.offset_m} m (NRCan conversion grid); this
+      offset is consistent with 2008 observations but not proven, and historical datum conversions carry some
+      uncertainty. The terrain is a 2024 survey, so it may not match 2008 ground (e.g. later regrading) when used with
+      the 2008 reference. The vulnerability classification is not changed by this scenario.</div>`;
 }
 
 function renderFloodKey() {
@@ -397,6 +407,7 @@ async function enterFlood(g) {
   if (!floodOn) {
     clearMitigation();
     floodSavedSel = selected;
+    floodSavedBld = { src: bldShown.src, pinned: bldPinned };   // restored exactly on exit
     if (selected !== null) map.setFeatureState({ source: "streets", id: selected }, { selected: false });
     selected = null;
     $("panel").classList.add("hidden");
@@ -409,10 +420,12 @@ async function enterFlood(g) {
     $("floodCtl").classList.remove("hidden");
     applyBuildingCats();
     if (!floodInfo) {
-      floodInfo = await (await fetch("/api/fredericton/flood/info")).json();
-      if (!floodOn) return;
-      map.getSource("fl-cover").setData(floodInfo.coverage);
+      const info = await (await fetch("/api/fredericton/flood/info")).json();
+      floodInfo = floodInfo || info;
     }
+    if (!floodOn) return;
+    map.getSource("fl-cover").setData(floodInfo.coverage);   // on every activation, not only the first request
+    coverFeatures = floodInfo.coverage.features.length;
   }
   if (g !== undefined) $("gauge").value = g;
   updateGaugeReadout($("gauge").value);
@@ -430,7 +443,12 @@ function exitFlood(restoreSelection = true) {
   $("floodOnBox").checked = false;
   $("floodCtl").classList.add("hidden");
   $("floodOut").innerHTML = ""; delete $("floodOut").dataset.state;
-  applyBuildingCats();
+  const saved = floodSavedBld; floodSavedBld = null;
+  if (restoreSelection && saved) {               // restore the pre-flood footprint source and the viewer's pin
+    bldPinned = saved.pinned;
+    if (saved.src && bldShown.src !== saved.src) loadBuildings(current, saved.src);   // applies categories on arrival
+  }
+  applyBuildingCats();                           // no-op until the (possibly restored) source is ready
   const sel = floodSavedSel; floodSavedSel = null;
   if (restoreSelection && sel !== null) select(sel);
 }
@@ -463,11 +481,13 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
     return JSON.stringify({ vis, streetsOpacity: map.getPaintProperty("streets", "line-opacity"),
       filters: SCAN_OVERLAYS.map((l) => map.getFilter(l)), selected, panelHidden: $("panel").classList.contains("hidden"),
       panelText: $("panel").textContent.replace(/\s+/g, " ").trim(), drawDisabled: $("drawBtn").disabled,
-      floodCtlHidden: $("floodCtl").classList.contains("hidden"), bldStates: bldStateN, floodOn });
+      floodCtlHidden: $("floodCtl").classList.contains("hidden"), bldStates: bldStateN, floodOn,
+      bldSrc: bldShown.src, bldPinned });
   },
   floodState: () => ({ on: floodOn, area: current, cardState: $("floodOut").dataset.state || null,
     cardText: $("floodOut").textContent.replace(/\s+/g, " ").trim(), bldStates: bldStateN,
-    boxHidden: $("floodBox").classList.contains("hidden") }),
+    boxHidden: $("floodBox").classList.contains("hidden"), coverFeatures,
+    bldSrc: bldShown.src, bldReady: bldShown.ready, bldPinned }),
   state() {
     const box = document.getElementById("mitig");
     return { area: current, cardHidden: box.classList.contains("hidden"), cardState: box.dataset.state || null,

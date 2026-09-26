@@ -9,7 +9,17 @@ const realFetch = window.fetch.bind(window);
 const delays = [];
 const arrivals = [];
 const floodDelays = [];   // delays (ms) applied, in order, to /flood?gauge= responses
+const infoDelays = [];    // ... to /flood/info responses
+const bldDelays = [];     // ... to /buildings/ footprint responses
 window.fetch = async (url, opts) => {
+  for (const [needle, q] of [["/flood/info", infoDelays], ["/buildings/", bldDelays]]) {
+    if (String(url).includes(needle)) {
+      const d = q.length ? q.shift() : 0;
+      const resp = await realFetch(url, opts);
+      await sleep(d);
+      return resp;
+    }
+  }
   if (String(url).includes("/flood?gauge=")) {
     const d = floodDelays.length ? floodDelays.shift() : 0;
     const resp = await realFetch(url, opts);
@@ -31,6 +41,25 @@ const record = (name, pass, detail) => out.push({ name, pass, detail });
 async function floodSuite() {
   const waitDone = async () => { for (let i = 0; i < 150 && app.floodState().cardState !== "done"; i++) await sleep(200); };
   await app.loadArea("fredericton");
+  const waitBld = async (src) => { for (let i = 0; i < 100; i++) { const f = app.floodState(); if (f.bldSrc === src && f.bldReady) return; await sleep(200); } };
+  await waitBld("osm");
+  // F3. interrupted FIRST activation: info response arrives after the scenario was turned off; re-enable -> outline
+  infoDelays.push(1500);
+  const p3 = app.flood(); await sleep(100); app.unflood(); await p3; await sleep(300);
+  const coverAfterInterrupt = app.floodState().coverFeatures;
+  await app.flood(8.36); await waitDone();
+  record("F3 coverage outline after interrupted first activation", coverAfterInterrupt === 0 && app.floodState().coverFeatures > 0,
+         { coverAfterInterrupt, coverAfterReenable: app.floodState().coverFeatures });
+  app.unflood(); await waitBld("osm");
+  // F4. OSM -> flood -> choose Microsoft -> exit: original source and pin restored
+  const b4 = JSON.parse(app.snapshot());
+  await app.flood(8.36); await waitDone();
+  document.querySelector('#floodBld button[data-src="ms"]').click(); await waitBld("ms");
+  const inFlood = app.floodState();
+  app.unflood(); await waitBld("osm"); await sleep(300);
+  const a4 = JSON.parse(app.snapshot());
+  record("F4 exit restores pre-flood footprint source and pin", inFlood.bldSrc === "ms" && a4.bldSrc === b4.bldSrc &&
+         a4.bldPinned === b4.bldPinned && a4.bldStates === b4.bldStates, { before: [b4.bldSrc, b4.bldPinned], inFlood: inFlood.bldSrc, after: [a4.bldSrc, a4.bldPinned] });
   // F5a. reset restores the exact baseline (no neighbourhood selected)
   const base0 = app.snapshot();
   await app.flood(8.36); await waitDone();
@@ -64,7 +93,8 @@ async function floodSuite() {
   document.getElementById("drawBtn").click();
   record("F7b road test disabled in flood mode", document.getElementById("drawBtn").disabled &&
          document.getElementById("hint").classList.contains("hidden"), {});
-  // F6. switching area clears the flood scenario
+  // F6. switching area clears the flood scenario - checked while the new area's footprints are still delayed
+  bldDelays.push(4000);
   await app.loadArea("tantallon"); await sleep(300);
   const s6 = app.floodState(), snap6 = JSON.parse(app.snapshot());
   record("F6 area switch clears flood state", !s6.on && s6.boxHidden && s6.bldStates === 0 &&

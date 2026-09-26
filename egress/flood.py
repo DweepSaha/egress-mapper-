@@ -62,9 +62,11 @@ def river_seed(dem: np.ndarray, nodata, tr):
 
 
 def connected_water(dem: np.ndarray, nodata, tr, level: float, seed):
-    """Area (raster CRS) of valid cells below `level` that are 4-connected to the river seed."""
+    """Area (raster CRS) of valid cells below `level` that are 4-connected to the river seed.
+    A region counts only if its INTERIOR overlaps the seed: touching at a single cell corner (diagonal contact) is
+    not 4-neighbour connectivity and does not connect."""
     below = valid_mask(dem, nodata) & (dem < level)
-    return shapely.union_all([p for p in _polys(below, tr) if p.intersects(seed)])
+    return shapely.union_all([p for p in _polys(below, tr) if p.relate_pattern(seed, "T********")])
 
 
 @lru_cache(maxsize=1)
@@ -116,9 +118,15 @@ def scenario(area: engine.Area, gauge_m: float) -> dict:
         return _cache[key]
 
 
-def _scenario(area: engine.Area, gauge_m: float) -> dict:
-    water, level = water_polygon(gauge_m)
-    bridges = _bridge_pairs(area.name)
+def eligible(area: engine.Area, nb: engine.Neighbourhood) -> bool:
+    """Access counting uses exactly the scan's eligibility: gateways, MIN_HOMES+ mapped buildings, assessed."""
+    return bool(nb.gateways) and nb.n_homes >= engine.MIN_HOMES and engine._assessed(area, nb)
+
+
+def access_under_water(area: engine.Area, water, bridges: frozenset) -> dict:
+    """Road access under a given water area (EPSG:2953). Pure function of the area, water and bridge set.
+    Access categories (lose / keep) cover eligible neighbourhoods only; "inside" covers every analysed building whose
+    centre is inside the water, whatever its road or neighbourhood (a wider, physical scope)."""
     is_bridge = [frozenset((e.u, e.v)) in bridges for e in area.edges]
     incident = {}
     for i, e in enumerate(area.edges):
@@ -139,8 +147,8 @@ def _scenario(area: engine.Area, gauge_m: float) -> dict:
     retain = {s: set() for s in engine.SOURCES}
     cut_lines, n_affected_nb = [], 0
     for nb in engine.neighbourhoods(area):
-        if not nb.gateways or nb.n_homes == 0 or not engine._assessed(area, nb):
-            continue                                  # same eligibility as the scan (boundary rule)
+        if not eligible(area, nb):
+            continue                                  # same eligibility as the scan (30+ threshold, boundary rule)
         cohort = nb.cohort(area)
         nb_blocked = {i: blocked[i] for i in nb.edge_idx if i in blocked}
         nb_nodes = nb.local_nodes | nb.gateways
@@ -158,11 +166,21 @@ def _scenario(area: engine.Area, gauge_m: float) -> dict:
 
     flooded = [area.edges[i].line.intersection(water) for i in blocked]
     flooded = [f for f in flooded if not f.is_empty]
+    return dict(cut=cut, inside=inside, retain=retain, cut_lines=cut_lines, flooded=flooded, n_affected_nb=n_affected_nb)
+
+
+def _scenario(area: engine.Area, gauge_m: float) -> dict:
+    water, level = water_polygon(gauge_m)
+    a = access_under_water(area, water, _bridge_pairs(area.name))
+    cut, inside, retain, cut_lines, flooded, n_affected_nb = (a[k] for k in (
+        "cut", "inside", "retain", "cut_lines", "flooded", "n_affected_nb"))
     to_ll, fc = engine._TO_LL, engine._fc
     counts = {cat: {s: len(ids[s]) for s in engine.SOURCES} for cat, ids in
               (("lose_access", cut), ("inside", inside), ("keep_access", retain))}
     return dict(
         gauge_m=gauge_m, water_cgvd2013_m=round(level, 3), offset_m=CGVD28_TO_CGVD2013_M, gauge=GAUGE,
+        access_scope=f"assessed neighbourhoods of {engine.MIN_HOMES}+ mapped buildings (same as the scan)",
+        inside_scope="every mapped building whose centre is inside the water area",
         roads_affected_km=round(sum(f.length for f in flooded) / 1000, 2), road_segments_affected=len(flooded),
         water_km2=round(water.area / 1e6, 2), neighbourhoods_losing_access=n_affected_nb,
         counts=counts, headline={k: max(v.values()) for k, v in counts.items()},   # frozen higher-of-two rule
