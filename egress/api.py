@@ -2,11 +2,12 @@
 from contextlib import asynccontextmanager
 from threading import Lock
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, engine
+from . import config, engine, viz
 
 AREAS = {
     "tantallon": dict(label="Upper Tantallon, NS", center=[-63.862, 44.715], zoom=13.2),
@@ -33,10 +34,13 @@ def get(area: str) -> dict:
 async def lifespan(app: FastAPI):
     for name in AREAS:          # pre-compute so the first click is instant
         get(name)
+        for src in engine.SOURCES:
+            viz.footprints(get(name)["area"], src)   # also verifies footprint ids match engine building ids
     yield
 
 
 app = FastAPI(title="Egress mapper", lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=2048)   # footprints are large but compress well
 
 
 @app.get("/api/areas")
@@ -62,6 +66,27 @@ def roads(area: str):
 @app.get("/api/{area}/boundary")
 def boundary(area: str):
     return get(area)["boundary"]
+
+
+@app.get("/api/{area}/buildings/{src}")
+def buildings(area: str, src: str):
+    """Analysed footprints (>= 40 m2) for one source; feature id = engine building id. Display only."""
+    if src not in engine.SOURCES:
+        raise HTTPException(404, "source must be osm or ms")
+    return Response(viz.footprints(get(area)["area"], src), media_type="application/json")
+
+
+@app.get("/api/{area}/nb/{nid}/buildings")
+def nb_buildings(area: str, nid: int):
+    """Building ids per source for this neighbourhood's worst blockage: cut / inside / retain. Display only."""
+    c = get(area)
+    r = next((r for r in c["results"] if r["nid"] == nid), None)
+    if r is None:
+        raise HTTPException(404, f"no neighbourhood {nid}")
+    key = ("cat", area, nid)
+    if key not in c:
+        c[key] = viz.categories(c["area"], r)
+    return c[key]
 
 
 class Proposal(BaseModel):

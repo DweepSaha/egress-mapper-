@@ -42,6 +42,18 @@ map.addLayer({ id: "roads", type: "line", source: "roads", paint: {
   "line-color": ["case", ["get", "way_out"], "#e8edf2", "#4b5663"],
   "line-width": ["interpolate", ["linear"], ["zoom"], 11, ["case", ["get", "way_out"], 1.4, 0.3],
                  16, ["case", ["get", "way_out"], 4, 1.2]] } });
+// Mapped building footprints (display only). One source at a time (OSM or Microsoft), feature id = engine building
+// id, category set via feature-state so the same source/colour rule can later drive a fill-extrusion (3D) layer.
+map.addSource("bld", { type: "geojson", data: empty });
+const BLD_CAT = ["feature-state", "cat"];
+const BLD_COLOR = ["match", BLD_CAT, "cut", "#ff7a45", "inside", "#c084fc", "retain", "#4fb3a0", "#3b4452"];
+const BLD_OPACITY = ["match", BLD_CAT, "cut", 0.95, "inside", 0.95, "retain", 0.6, 0.35];
+map.addLayer({ id: "bld-fill", type: "fill", source: "bld", minzoom: 12,
+  paint: { "fill-color": BLD_COLOR, "fill-opacity": BLD_OPACITY } }, "roads");
+map.addLayer({ id: "bld-line", type: "line", source: "bld", minzoom: 14,
+  paint: { "line-color": BLD_COLOR, "line-width": 0.6,
+           "line-opacity": ["match", BLD_CAT, "cut", 1, "inside", 1, 0] } }, "roads");
+
 const SEL = ["boolean", ["feature-state", "selected"], false];
 map.addLayer({ id: "streets", type: "line", source: "streets", layout: { "line-cap": "round", "line-join": "round" },
   paint: {
@@ -97,7 +109,8 @@ function select(nid) {
   if (!f) { panel.classList.add("hidden"); updateChokeFilter(); return; }
   map.setFeatureState({ source: "streets", id: nid }, { selected: true });
   panel.className = `card ${f.properties.status}`;
-  panel.innerHTML = panelHtml(f.properties);
+  panel.innerHTML = panelHtml(f.properties) + `<div id="bldInfo"></div>`;
+  showBuildings(nid, f.properties);
   map.setFilter("cut", ["==", ["get", "nid"], nid]);
   map.setFilter("blocked", ["==", ["get", "nid"], nid]);
   updateChokeFilter();
@@ -105,6 +118,53 @@ function select(nid) {
   const add = (c) => (typeof c[0] === "number" ? b.extend(c) : c.forEach(add));
   add(f.geometry.coordinates);
   map.fitBounds(b, { padding: { top: 60, bottom: 60, left: 380, right: 60 }, maxZoom: 16, duration: 900 });
+}
+
+// ---------- mapped building footprints ----------
+const SRC_LABEL = { osm: "OpenStreetMap", ms: "Microsoft" };
+let bldShown = { area: null, src: null }, bldCats = null, bldPinned = null;
+
+async function loadBuildings(area, src) {
+  if (bldShown.area === area && bldShown.src === src) return;
+  bldShown = { area, src };
+  const data = await (await fetch(`/api/${area}/buildings/${src}`)).json();
+  if (bldShown.area !== area || bldShown.src !== src) return;      // superseded
+  map.getSource("bld").setData(data);
+  applyBuildingCats();
+}
+
+function applyBuildingCats() {
+  map.removeFeatureState({ source: "bld" });
+  if (!bldCats || bldCats.area !== bldShown.area) return;
+  const s = bldCats.sources[bldShown.src];
+  for (const cat of ["retain", "cut", "inside"]) for (const id of s[cat]) map.setFeatureState({ source: "bld", id }, { cat });
+  renderBuildingInfo();
+}
+
+function renderBuildingInfo() {
+  const el = document.getElementById("bldInfo");
+  if (!el || !bldCats) return;
+  const s = bldCats.sources[bldShown.src], p = bldCats.props;
+  const btn = (src) => `<button data-src="${src}" class="${src === bldShown.src ? "on" : ""}">${SRC_LABEL[src]} (${src === "osm" ? p.homes_osm : p.homes_ms})</button>`;
+  el.innerHTML = `<div class="bldsrc">Footprints shown: ${btn("osm")}${btn("ms")}</div>
+    ${bldCats.choke ? `<div class="bldkey"><span class="k cut"></span>lose access (${s.cut.length})
+      <span class="k inside"></span>inside the blocked area (${s.inside.length})
+      <span class="k retain"></span>keep access (${s.retain.length})</div>` : ""}
+    ${bldCats.matches_scan === false ? `<div class="src">Note: building display does not match the scan counts.</div>` : ""}`;
+  el.querySelectorAll("button[data-src]").forEach((b) => (b.onclick = () => {
+    bldPinned = b.dataset.src; loadBuildings(bldShown.area, bldPinned).then(renderBuildingInfo);
+  }));
+}
+
+async function showBuildings(nid, props) {
+  const area = current;
+  const cats = await (await fetch(`/api/${area}/nb/${nid}/buildings`)).json();
+  if (area !== current || nid !== selected) return;
+  bldCats = { ...cats, area, props };
+  // default to the source that gives the headline count (the higher of the two), unless the viewer picked one
+  const src = bldPinned || (props.homes_ms > props.homes_osm ? "ms" : "osm");
+  if (bldShown.src !== src || bldShown.area !== area) await loadBuildings(area, src);
+  applyBuildingCats();
 }
 
 function updateChokeFilter() {
@@ -130,6 +190,8 @@ async function loadArea(name) {
     ["scan", "roads", "boundary"].map((k) => fetch(`/api/${name}/${k}`).then((r) => r.json())));
   if (current !== name) return;
   scanData = scan;
+  bldCats = null; bldPinned = null;
+  loadBuildings(name, "osm");   // subtle background footprints; loads after the roads, never blocks them
   map.getSource("roads").setData(roads);
   map.getSource("boundary").setData(boundary);
   map.getSource("nb").setData(scan.neighbourhoods);

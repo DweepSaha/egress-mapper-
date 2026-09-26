@@ -24,6 +24,14 @@ h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: v
 .card .cut { font-size: 15px; margin: 6px 0; }
 .card .src, .fine { color: var(--muted); font-size: 12px; }
 .hidden { display: none; }
+.bldsrc { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.bldsrc button { margin-left: 4px; padding: 2px 6px; border-radius: 4px; border: 1px solid #333b45; background: #1b1f25;
+                 color: var(--muted); font: inherit; cursor: pointer; }
+.bldsrc button.on { color: var(--fg); border-color: #6b7c8f; }
+.bldkey { margin-top: 6px; font-size: 12px; line-height: 1.8; }
+.bldkey .k { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 4px 0 6px; vertical-align: -1px; }
+.bldkey .k:first-child { margin-left: 0; }
+.k.cut { background: #ff7a45; } .k.inside { background: #c084fc; } .k.retain { background: #4fb3a0; }
 #tools { display: flex; gap: 6px; margin-top: 12px; }
 #tools button { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #2f6f8f; background: #12303f;
                 color: #e6f4fb; font: inherit; font-weight: 600; cursor: pointer; }
