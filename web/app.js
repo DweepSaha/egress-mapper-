@@ -107,6 +107,27 @@ const CHOKE_R = (sel) => ["interpolate", ["linear"], ["zoom"], 11, ["case", sel,
 map.addLayer({ id: "choke", type: "circle", source: "choke", paint: {
   "circle-color": "#ffffff", "circle-stroke-color": "#ff3b30", "circle-stroke-width": 2,
   "circle-radius": CHOKE_R(false) } });
+// Blockage the user placed (probe): geometry comes from the server (the same 50 m circle evaluate_block used, and the
+// streets it strands). Cyan edge = "you placed it"; the scan's worst sampled blockage keeps the white edge.
+map.addSource("probe", { type: "geojson", data: empty });
+map.addSource("probe-preview", { type: "geojson", data: empty });   // drag preview only: never analysed
+map.addSource("blk-hit", { type: "geojson", data: empty });          // grab handle at the displayed blockage centre
+const KIND = (k) => ["==", ["get", "kind"], k];
+map.addLayer({ id: "probe-cut", type: "line", source: "probe", filter: KIND("cut"), layout: { "line-cap": "round", "line-join": "round" },
+  paint: { "line-color": "#ff3b30", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2.5, 16, 6.5] } });
+map.addLayer({ id: "probe-gap", type: "fill", source: "probe", filter: KIND("disc"), paint: { "fill-color": "#07090c", "fill-opacity": 0.82 } });
+map.addLayer({ id: "probe-hatch", type: "fill", source: "probe", filter: KIND("disc"), paint: { "fill-pattern": "hatch", "fill-opacity": 0.55 } });
+map.addLayer({ id: "probe-edge", type: "line", source: "probe", filter: KIND("disc"),
+  paint: { "line-color": "#7fdcff", "line-width": ["interpolate", ["linear"], ["zoom"], 12, 2.5, 16, 4], "line-dasharray": [2, 1.2] } });
+map.addLayer({ id: "probe-dot", type: "circle", source: "probe", filter: KIND("centre"),
+  paint: { "circle-color": "#7fdcff", "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 3.5] } });
+map.addLayer({ id: "pv-gap", type: "fill", source: "probe-preview", paint: { "fill-color": "#07090c", "fill-opacity": 0.7 } });
+map.addLayer({ id: "pv-hatch", type: "fill", source: "probe-preview", paint: { "fill-pattern": "hatch", "fill-opacity": 0.45 } });
+map.addLayer({ id: "pv-edge", type: "line", source: "probe-preview",
+  paint: { "line-color": "#7fdcff", "line-width": 2, "line-opacity": 0.9, "line-dasharray": [1, 1] } });
+map.addLayer({ id: "blk-hit", type: "circle", source: "blk-hit",
+  paint: { "circle-radius": 20, "circle-color": "#ffffff", "circle-opacity": 0.01 } });
+const PROBE_LAYERS = ["probe-cut", "probe-gap", "probe-hatch", "probe-edge", "probe-dot", "pv-gap", "pv-hatch", "pv-edge", "blk-hit"];
 const BLOCKED_LAYERS = ["blocked", "blocked-hatch", "blocked-edge"];
 const setBlockedFilter = (nid) => BLOCKED_LAYERS.forEach((l) => map.setFilter(l, ["==", ["get", "nid"], nid]));
 
@@ -136,7 +157,7 @@ map.addLayer({ id: "fl-cut", type: "line", source: "fl-cut", layout: { visibilit
 map.addLayer({ id: "fl-roads", type: "line", source: "fl-roads", layout: { visibility: "none", "line-cap": "round" },
   paint: { "line-color": "#22d3ee", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 6] } });
 const FLOOD_LAYERS = ["fl-cover", "fl-water", "fl-water-line", "fl-cut", "fl-roads"];
-const SCAN_OVERLAYS = ["choke", "blocked", "blocked-hatch", "blocked-edge", "cut"];   // hidden in scenario modes, restored after
+const SCAN_OVERLAYS = ["choke", "blocked", "blocked-hatch", "blocked-edge", "cut", ...PROBE_LAYERS];   // hidden in scenario modes
 const STREET_OPACITY = map.getPaintProperty("streets", "line-opacity");
 // fire scenario layers (Tantallon only; hidden unless the fire scenario is active)
 for (const s of ["fi-zone", "fi-roads", "fi-cut"]) map.addSource(s, { type: "geojson", data: empty });
@@ -229,11 +250,13 @@ function panelHtml(p) {
       <div><span class="sw blk"></span><span><b>Blocked road area</b> (hatched circle, 100 m across): roads inside it are unavailable</span></div>
       <div><span class="sw rd"></span><span><b>Streets in bright red</b> lose their way out: every route to a major road passes through it</span></div>
       <div><span class="sw bo"></span><span><b>Orange mapped buildings</b> on those streets lose access; teal ones keep it</span></div>
-      <div class="fine">The worst of the sampled blockages, not an absolute worst case.</div></div>` : ""}
+      <div class="fine">The worst of the sampled blockages, not an absolute worst case. Drag the hatched circle along
+        the roads to test a blockage you choose.</div></div>` : ""}
     ${srcBars(p.homes_osm, p.homes_ms, "Mapped buildings: source comparison")}`;
 }
 
 function select(nid) {
+  clearProbe();                            // a placed blockage belongs to one neighbourhood; never carried over
   if (floodOn) exitFlood(false);           // selecting a neighbourhood returns to the vulnerability view
   if (fireOn) exitFire(false);
   if (selected !== null) map.setFeatureState({ source: "streets", id: selected }, { selected: false });
@@ -248,7 +271,7 @@ function select(nid) {
   showBuildings(nid, f.properties);
   map.setFilter("cut", ["==", ["get", "nid"], nid]);
   setBlockedFilter(nid);
-  updateChokeFilter();
+  renderBlockage();
   const b = new maplibregl.LngLatBounds();
   const add = (c) => (typeof c[0] === "number" ? b.extend(c) : c.forEach(add));
   add(f.geometry.coordinates);
@@ -286,7 +309,8 @@ function applyBuildingCats() {
   // the flood scenario and the selected-neighbourhood view never mix: one or the other drives the categories
   const scen = floodOn ? floodData : fireOn ? fireData : null;     // a scenario mode, if active, owns the categories
   const cats = (floodOn || fireOn) ? (scen && scen.area === bldShown.area ? scen.ids[bldShown.src] : null)
-                       : (bldCats && bldCats.area === bldShown.area ? bldCats.sources[bldShown.src] : null);
+               : probeShown() && probe.area === bldShown.area ? probe.data.ids[bldShown.src]
+               : (bldCats && bldCats.area === bldShown.area ? bldCats.sources[bldShown.src] : null);
   if (!cats) return;
   const ns = bldShown.ns;
   for (const cat of ["retain", "cut", "inside"]) for (const id of cats[cat]) {
@@ -327,8 +351,10 @@ async function showBuildings(nid, props) {
 
 function updateChokeFilter() {
   // only the top-ranked choke points (and the selected one) are drawn, to avoid a wall of markers
-  map.setFilter("choke", ["any", ["all", ["!=", ["get", "rank"], null], ["<=", ["get", "rank"], SHOW_TOP_CHOKES]],
-                          ["==", ["get", "nid"], selected ?? -1]]);
+  const probing = probeShown();
+  map.setFilter("choke", ["all", ["any", ["all", ["!=", ["get", "rank"], null], ["<=", ["get", "rank"], SHOW_TOP_CHOKES]],
+                                  ["==", ["get", "nid"], selected ?? -1]],
+                          ["!=", ["get", "nid"], probing ? selected : -2]]);
   map.setPaintProperty("choke", "circle-radius", CHOKE_R(["==", ["get", "nid"], selected ?? -1]));
 }
 
@@ -389,6 +415,7 @@ async function loadArea(name) {
   map.getSource("nb").setData(scan.neighbourhoods);
   map.getSource("streets").setData(scan.streets);
   map.getSource("cut").setData(scan.cut_roads);
+  roadsData = roads;                       // snap preview for dragging (display only)
   map.getSource("blocked").setData(scan.blocked);
   map.getSource("choke").setData(scan.chokepoints);
   selected = null;
@@ -396,7 +423,7 @@ async function loadArea(name) {
   document.getElementById("panel").classList.add("hidden");
   map.setFilter("cut", ["==", ["get", "nid"], -1]);
   setBlockedFilter(-1);
-  updateChokeFilter();
+  renderBlockage();
   renderOverview();
   renderSummary();
   syncMode();
@@ -417,6 +444,7 @@ let mitGen = 0, mitKey = null, proposalCount = 0;
 function setProposal(features) { proposalCount = features.length; map.getSource("proposal").setData(fc(features)); }
 
 function clearMitigation() {
+  clearProbe();
   mitGen++; mitKey = null;
   drawing = false; clicks = [];
   setProposal([]);
@@ -803,6 +831,185 @@ function exitFire(restoreSelection = true) {
 }
 
 
+// ---------- user-placed blockage (probe): drag the circle along the roads, release to test ----------
+// Drag = visual only (local snap preview, no request, no state change). Release = ONE request. Every drop, drag start,
+// reset, selection change, area switch, scenario entry and mitigation start bumps probeGen; a response is applied only
+// if it is still the newest request for the same area + neighbourhood in vulnerability mode.
+let probe = null, probeGen = 0, probeState = "none", probeMsg = "", drag = null, roadsData = null;
+const PROBE_SNAP_M = 60;                              // same tolerance as the server (egress/probe.py SNAP_TOL_M)
+function probeShown() { return !!(probe && probe.area === current && probe.nid === selected && !floodOn && !fireOn); }
+function selProps() {
+  const f = scanData && selected !== null && scanData.neighbourhoods.features.find((x) => x.id === selected);
+  return f ? f.properties : null;
+}
+function canProbe() {
+  const p = selProps();
+  return !!(p && p.status !== "not_assessed" && !floodOn && !fireOn && !drawing && proposalCount === 0);
+}
+// local metric frame for the preview (display only; the server does the authoritative snap in the analysis CRS)
+function localFrame(lat0) { const kx = 111320 * Math.cos((lat0 * Math.PI) / 180), ky = 110540; return { kx, ky }; }
+function snapPreview(ll) {
+  if (!drag) return null;
+  const { kx, ky } = drag.frame, px = (ll.lng - drag.o[0]) * kx, py = (ll.lat - drag.o[1]) * ky;
+  let best = null, bd = Infinity;
+  for (const [ax, ay, bx, by] of drag.segs) {
+    const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+    const t = L2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L2)) : 0;
+    const qx = ax + t * dx, qy = ay + t * dy, d = Math.hypot(px - qx, py - qy);
+    if (d < bd) { bd = d; best = [qx, qy]; }
+  }
+  return best && { ll: [drag.o[0] + best[0] / kx, drag.o[1] + best[1] / ky], d: bd };
+}
+function discAt(ll) {   // preview circle, 50 m radius (drawn only; the analysed circle comes from the server)
+  const { kx, ky } = localFrame(ll[1]), ring = [];
+  for (let k = 0; k <= 64; k++) { const a = (k / 64) * 2 * Math.PI; ring.push([ll[0] + (50 * Math.cos(a)) / kx, ll[1] + (50 * Math.sin(a)) / ky]); }
+  return fc([{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } }]);
+}
+function blockageCentre() {   // centre of the blockage currently shown for the selected neighbourhood
+  if (probeShown()) return probe.data.centre;
+  const c = scanData && scanData.chokepoints.features.find((x) => x.properties.nid === selected);
+  return c ? c.geometry.coordinates : null;
+}
+function renderBlockage() {
+  const shown = probeShown(), nid = selected ?? -1;
+  map.getSource("probe").setData(shown ? probe.data.geo : empty);
+  setBlockedFilter(shown ? -1 : nid);
+  map.setFilter("cut", ["==", ["get", "nid"], shown ? -1 : nid]);
+  updateChokeFilter();
+  const c = !drag && canProbe() ? blockageCentre() : null;
+  map.getSource("blk-hit").setData(c ? fc([pt(c)]) : empty);
+  renderProbeCard();
+}
+function renderProbeCard() {
+  const el = $("probeCard"), badge = $("blkBadge"), p = selProps();
+  const vis = !!p && !floodOn && !fireOn && (probeState !== "none" || probeShown());
+  badge.classList.toggle("hidden", !p || floodOn || fireOn || p.status === "not_assessed" || proposalCount > 0);
+  badge.className = badge.className.replace(/ ?probe-on/, "") + (probeShown() || drag ? " probe-on" : "");
+  badge.textContent = drag ? (drag.far ? "Too far from a road: release to cancel" : "Release to test this blockage")
+    : probeState === "pending" ? "Testing…" : probeShown() ? "Map shows: blockage you placed" : "Map shows: worst sampled blockage";
+  el.classList.toggle("hidden", !vis);
+  el.dataset.state = probeState;
+  if (!vis) { el.innerHTML = ""; return; }
+  const worst = `<div class="fine">Worst sampled blockage for this neighbourhood (scan finding): <b>${N(p.worst_cut)}</b>
+    <span class="src">(${pairTxt(p.worst_cut_osm, p.worst_cut_ms)})</span></div>`;
+  const reset = `<button id="probeReset" class="probe-reset">Reset to worst sampled blockage</button>`;
+  let body;
+  if (probeState === "dragging") body = `<div class="big">Release to test this blockage</div>
+    <div class="fine">Nothing is recalculated until you release. The circle stays on the roads (fixed 100 m across).</div>`;
+  else if (probeState === "pending") body = `<div class="big">Testing…</div><div class="fine">One calculation for the blockage you placed.</div>`;
+  else if (probeShown()) {
+    const d = probe.data, c = d.counts;
+    body = `<div class="mgrid2">
+        ${metric(N(d.cut), "mapped buildings lose access if this road area is blocked", d.cut > 0 ? "cut" : "retain", pairTxt(d.cut_osm, d.cut_ms))}
+        ${metric(N(Math.max(c.inside.osm, c.inside.ms)), "centre inside the blocked area", "inside", pairTxt(c.inside.osm, c.inside.ms))}
+      </div>
+      ${distBlock("Mapped buildings under the blockage you placed", [
+        { cls: "cut", label: "Lose access", key: "cut" }, { cls: "inside", label: "Inside the blocked area", key: "inside" },
+        { cls: "retain", label: "Retain access", key: "retain" }], c, false)}
+      ${d.cut > p.worst_cut ? `<div class="fine">Higher than the worst sampled blockage: the scan tests points every 50 m,
+        and this position falls between them.</div>` : ""}`;
+  } else body = "";
+  el.innerHTML = `<div class="kicker">Blockage you placed</div>
+    ${probeMsg ? `<div class="pmsg">${probeMsg}</div>` : ""}${body}${worst}${reset}
+    <div class="fine">Your test only: it does not change the scan, the ranking or the neighbourhood's classification.</div>`;
+  $("probeReset").onclick = () => clearProbe();
+}
+function endDragListeners() {
+  if (!drag) return;
+  map.off("mousemove", onProbeMove); document.removeEventListener("mouseup", onProbeUp, true);
+  document.removeEventListener("keydown", onProbeKey, true);
+  map.dragPan.enable(); map.getCanvas().style.cursor = "";
+  map.getSource("probe-preview").setData(empty);
+}
+function clearProbe() {       // reset to the worst sampled blockage; invalidates any drag or pending request
+  probeGen++;
+  endDragListeners(); drag = null;
+  const had = probe !== null;
+  probe = null; probeState = "none"; probeMsg = "";
+  if (!scanData) return;
+  renderBlockage();
+  if (had) applyBuildingCats();
+}
+function onProbeKey(e) { if (e.key === "Escape") onProbeUp(null); }
+function onProbeMove(e) {
+  if (!drag || drag.area !== current || drag.nid !== selected || !canProbe()) return onProbeUp(null);
+  const s = snapPreview(e.lngLat);
+  drag.far = !s || s.d > PROBE_SNAP_M;
+  if (!drag.far) drag.pos = s.ll;
+  map.getSource("probe-preview").setData(discAt(drag.pos));
+  renderProbeCard();
+}
+function onProbeUp(e) {
+  if (!drag) return;
+  const d = drag;
+  endDragListeners(); drag = null;
+  const valid = d.area === current && d.nid === selected && canProbe();
+  if (!valid) { probeState = probeShown() ? "done" : "none"; renderBlockage(); return; }
+  if (e === null || d.far || !d.moved) {               // cancelled, off the network, or a click without a drag
+    probeMsg = d.far ? `No road within ${PROBE_SNAP_M} m: the blockage went back to where it was.` : "";
+    probeState = probeShown() ? "done" : (probeMsg ? "rejected" : "none");
+    renderBlockage(); return;
+  }
+  runProbe(d.pos);
+}
+function startProbeDrag(e) {
+  if (drag || !canProbe()) return;
+  const c = blockageCentre();
+  if (!c) return;
+  e.preventDefault();
+  probeGen++;                                          // a drag supersedes any calculation still in flight
+  const f = scanData.neighbourhoods.features.find((x) => x.id === selected);
+  const street = scanData.streets.features.find((x) => x.id === selected || x.properties.nid === selected);
+  const b = new maplibregl.LngLatBounds(); const add = (q) => (typeof q[0] === "number" ? b.extend(q) : q.forEach(add));
+  add(f.geometry.coordinates);
+  const o = [b.getCenter().lng, b.getCenter().lat], frame = localFrame(o[1]), pad = 150;
+  const [x0, y0, x1, y1] = [(b.getWest() - o[0]) * frame.kx - pad, (b.getSouth() - o[1]) * frame.ky - pad,
+                            (b.getEast() - o[0]) * frame.kx + pad, (b.getNorth() - o[1]) * frame.ky + pad];
+  const segs = [], addLine = (line) => { for (let k = 1; k < line.length; k++) {
+    const ax = (line[k - 1][0] - o[0]) * frame.kx, ay = (line[k - 1][1] - o[1]) * frame.ky;
+    const bx = (line[k][0] - o[0]) * frame.kx, by = (line[k][1] - o[1]) * frame.ky;
+    if (Math.max(ax, bx) >= x0 && Math.min(ax, bx) <= x1 && Math.max(ay, by) >= y0 && Math.min(ay, by) <= y1) segs.push([ax, ay, bx, by]);
+  } };
+  const addGeom = (g) => g.type === "LineString" ? addLine(g.coordinates) : g.type === "MultiLineString" ? g.coordinates.forEach(addLine) : null;
+  if (street) addGeom(street.geometry);
+  if (roadsData) roadsData.features.forEach((r) => addGeom(r.geometry));
+  drag = { area: current, nid: selected, pos: c, far: false, moved: false, o, frame, segs };
+  probeState = "dragging"; probeMsg = "";
+  map.dragPan.disable(); map.getCanvas().style.cursor = "grabbing";
+  map.getSource("blk-hit").setData(empty);
+  map.getSource("probe-preview").setData(discAt(c));
+  map.on("mousemove", onProbeMove);
+  map.once("mousemove", () => { if (drag) drag.moved = true; });
+  document.addEventListener("mouseup", onProbeUp, true);
+  document.addEventListener("keydown", onProbeKey, true);
+  renderProbeCard();
+}
+async function runProbe(ll) {
+  const gen = ++probeGen, area = current, nid = selected;
+  const valid = () => gen === probeGen && current === area && selected === nid && !floodOn && !fireOn;
+  probeState = "pending"; probeMsg = "";
+  map.getSource("probe-preview").setData(discAt(ll));  // the circle stays where it was released while testing
+  renderProbeCard();
+  let d;
+  try {
+    const r = await fetch(`/api/${area}/nb/${nid}/probe`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lon: ll[0], lat: ll[1] }) });
+    if (!r.ok) throw new Error(`server replied ${r.status}`);
+    d = await r.json();
+  } catch (err) { d = { ok: false, message: `Couldn't test this blockage (${err.message}).` }; }
+  if (!valid()) return;                                // superseded: touch nothing
+  map.getSource("probe-preview").setData(empty);
+  if (!d.ok) { probeMsg = `${d.message} The blockage went back to where it was.`; probeState = probeShown() ? "done" : "rejected"; renderBlockage(); return; }
+  probe = { area, nid, data: d }; probeState = "done";
+  renderBlockage();
+  applyBuildingCats();
+}
+for (const l of ["blk-hit", "blocked", "probe-gap"]) {
+  map.on("mousedown", l, (e) => startProbeDrag(e));
+  map.on("mouseenter", l, () => { if (!drag && canProbe()) map.getCanvas().style.cursor = "grab"; });
+  map.on("mouseleave", l, () => { if (!drag) map.getCanvas().style.cursor = ""; });
+}
+
 // ---------- command-centre shell: scenario tabs, mode indicator, context line, status bar ----------
 const MODE_LABEL = { vuln: "VULNERABILITY", mit: "MITIGATION", flood: "FLOOD SCENARIO", fire: "FIRE SCENARIO" };
 function syncMode() {
@@ -893,7 +1100,7 @@ map.on("click", (e) => {
   runFire();
 });
 
-map.on("click", "nb-fill", (e) => { if (!drawing && !floodOn && !fireOn) select(e.features[0].id); });
+map.on("click", "nb-fill", (e) => { if (!drawing && !floodOn && !fireOn && !drag && e.features[0].id !== selected) select(e.features[0].id); });
 map.on("click", "choke", (e) => { if (!drawing && !floodOn && !fireOn) select(e.features[0].properties.nid); });
 map.on("mouseenter", "nb-fill", () => (map.getCanvas().style.cursor = "pointer"));
 map.on("mouseleave", "nb-fill", () => (map.getCanvas().style.cursor = ""));
@@ -961,6 +1168,15 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
     return f ? f.geometry.coordinates : null;
   },
   blockedFilter: () => map.getFilter("blocked"),
+  probeDrop: (lon, lat) => runProbe([lon, lat]),
+  probeDragStart() { const c = blockageCentre(); if (c) startProbeDrag({ preventDefault() {}, lngLat: { lng: c[0], lat: c[1] } }); return !!drag; },
+  probeDragEnd: (cancel) => onProbeUp(cancel ? null : {}),
+  probeReset: () => clearProbe(),
+  probeInfo: () => ({ shown: probeShown(), state: probeState, gen: probeGen, dragging: !!drag, msg: probeMsg,
+    centre: probe ? probe.data.centre : null, cut: probe ? [probe.data.cut_osm, probe.data.cut_ms] : null,
+    card: $("probeCard").textContent.replace(/\s+/g, " ").trim(), badge: $("blkBadge").textContent,
+    blocked: map.getFilter("blocked"), cut_filter: map.getFilter("cut"), dragPan: map.dragPan.isEnabled(),
+    probeFeatures: probeShown() ? probe.data.geo.features.length : 0 }),
   view: (v, animate = true) => setView(v, animate), viewState: () => ({ view, pitch: map.getPitch(), bearing: map.getBearing(),
     vis3d: map.getLayoutProperty("bld-3d", "visibility"), vis2d: map.getLayoutProperty("bld-fill", "visibility"),
     noteHidden: $("viewNote").classList.contains("hidden") }),
@@ -978,4 +1194,4 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
              clearVisible: !document.getElementById("clearBtn").classList.contains("hidden") };
   },
 };
-if (["1", "flood", "fire", "3d", "demo"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only
+if (["1", "flood", "fire", "3d", "demo", "probe"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only

@@ -1,4 +1,5 @@
 """FastAPI backend: serves scan results and the static map. Run: python scripts/serve.py"""
+import math
 from contextlib import asynccontextmanager
 from threading import Lock
 
@@ -7,7 +8,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, context, engine, fire, flood, viz
+from . import config, context, engine, fire, flood, probe, viz
 
 AREAS = {
     "tantallon": dict(label="Upper Tantallon, NS", center=[-63.862, 44.715], zoom=13.2),
@@ -129,6 +130,24 @@ def fire_hypothetical(lon: float, lat: float, radius: float):
         return fire.hypothetical(get("tantallon")["area"], lon, lat, radius)
     except ValueError as e:                     # non-finite / out-of-range centre or radius
         raise HTTPException(400, str(e))
+
+
+class ProbePoint(BaseModel):
+    lon: float
+    lat: float
+
+
+@app.post("/api/{area}/nb/{nid}/probe")
+def nb_probe(area: str, nid: int, p: ProbePoint):
+    """A blockage the USER placed (snapped to this neighbourhood's roads): the scan's own evaluate_block at that point.
+    Never a scan result; does not change the scan, ranking or classification."""
+    c = get(area)
+    r = next((r for r in c["results"] if r["nid"] == nid), None)
+    if r is None:
+        raise HTTPException(404, f"no neighbourhood {nid}")
+    if not (math.isfinite(p.lon) and math.isfinite(p.lat)):
+        raise HTTPException(400, "lon/lat must be finite")
+    return probe.probe(c["area"], r, p.lon, p.lat)
 
 
 class Proposal(BaseModel):

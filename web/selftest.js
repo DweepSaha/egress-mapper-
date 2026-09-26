@@ -12,6 +12,7 @@ const floodDelays = [];   // delays (ms) applied, in order, to /flood?gauge= res
 const infoDelays = [];    // ... to /flood/info responses
 const bldDelays = [];     // ... to /buildings/ footprint responses
 const fireDelays = [];    // ... to /fire/ scenario responses
+const probeDelays = [];   // ... to /probe responses (user-placed blockage)
 let apiCalls = 0;         // every /api/ request (the 3D suite asserts that toggling 2D/3D makes none)
 window.fetch = async (url, opts) => {
   if (String(url).includes("/api/")) apiCalls++;
@@ -22,6 +23,13 @@ window.fetch = async (url, opts) => {
       await sleep(d);
       return resp;
     }
+  }
+  if (String(url).includes("/probe")) {
+    const d = probeDelays.length ? probeDelays.shift() : 0;
+    const resp = await realFetch(url, opts);
+    await sleep(d);
+    arrivals.push("probe " + JSON.parse(opts.body).lon.toFixed(5));
+    return resp;
   }
   if (String(url).includes("/fire/")) {
     const d = fireDelays.length ? fireDelays.shift() : 0;
@@ -285,12 +293,90 @@ async function demoSuite() {
   app.clear();
 }
 
+async function probeSuite() {
+  // user-placed blockage: same scoring as the scan; state isolation and stale-response handling
+  const WORST = [-63.878859695, 44.725371840];            // Westwood's worst sampled centre
+  const OTHER = [-63.88573, 44.73359];                     // ~8 m off another Westwood street (snaps onto it)
+  const FAR = [-63.80, 44.80];
+  const P = () => app.probeInfo(), panel = () => JSON.parse(app.snapshot()).panelText;
+  const done = async () => { for (let i = 0; i < 100 && P().state === "pending"; i++) await sleep(100); };
+  const scanFilter = JSON.stringify(["==", ["get", "nid"], 99]), off = JSON.stringify(["==", ["get", "nid"], -1]);
+  await app.loadArea("tantallon"); app.select(99); await sleep(1500);
+  const panel0 = panel();
+  const s0 = P();
+  record("P0 selected Westwood shows the worst sampled blockage; badge says so",
+    !s0.shown && JSON.stringify(s0.blocked) === scanFilter && s0.badge === "Map shows: worst sampled blockage", s0);
+
+  await app.probeDrop(...WORST); await done();
+  const s1 = P();
+  record("P1 placing it at the worst sampled centre reproduces 234/194, labelled as 'blockage you placed'",
+    s1.shown && s1.cut[0] === 234 && s1.cut[1] === 194 && s1.card.includes("Blockage you placed") &&
+    s1.badge === "Map shows: blockage you placed" && JSON.stringify(s1.blocked) === off && panel() === panel0, s1);
+
+  await app.probeDrop(...OTHER); await done();
+  const s2 = P();
+  record("P2 placing it elsewhere gives a different result; the scan panel is unchanged",
+    s2.shown && JSON.stringify(s2.centre) !== JSON.stringify(s1.centre) && panel() === panel0 &&
+    s2.card.includes("Worst sampled blockage for this neighbourhood (scan finding): 234"), { centre: s2.centre, cut: s2.cut });
+
+  arrivals.length = 0; probeDelays.push(1500, 0);
+  const pA = app.probeDrop(...WORST); await sleep(100); const pB = app.probeDrop(...OTHER);
+  await Promise.all([pA, pB]); await done();
+  const s3 = P();
+  record("P3 rapid repeated drops: the older (slower) answer is discarded, the newest wins",
+    arrivals[0] === "probe " + OTHER[0].toFixed(5) && s3.shown &&
+    JSON.stringify(s3.centre) === JSON.stringify(s2.centre), { arrivals: arrivals.slice(), centre: s3.centre });
+
+  probeDelays.push(1500);
+  const pC = app.probeDrop(...WORST); await sleep(150);
+  const dragging = app.probeDragStart(); const mid = P();
+  await pC; await sleep(200);
+  const s4 = P();
+  app.probeDragEnd(true); await sleep(200);
+  const s4b = P();
+  record("P4 drag started during an in-flight calculation: the answer is discarded; cancelling restores the previous blockage",
+    dragging && mid.dragging && mid.badge === "Release to test this blockage" && s4.dragging &&
+    JSON.stringify(s4.centre) === JSON.stringify(s2.centre) && !s4b.dragging && s4b.dragPan && s4b.shown &&
+    JSON.stringify(s4b.centre) === JSON.stringify(s2.centre), { mid, s4b });
+
+  probeDelays.push(1500);
+  const pD = app.probeDrop(...WORST); await sleep(150);
+  app.probeReset(); await pD; await sleep(200);
+  const s5 = P();
+  record("P5 reset mid-calculation: back to the worst sampled blockage, late answer ignored",
+    !s5.shown && s5.state === "none" && JSON.stringify(s5.blocked) === scanFilter && s5.probeFeatures === 0 &&
+    panel() === panel0 && s5.badge === "Map shows: worst sampled blockage", s5);
+
+  await app.probeDrop(...FAR); await done();
+  const s6 = P();
+  record("P6 a release far from any road is rejected and nothing moves", !s6.shown && s6.state === "rejected" &&
+    s6.msg.includes("went back") && JSON.stringify(s6.blocked) === scanFilter, s6);
+
+  await app.probeDrop(...OTHER); await done();
+  probeDelays.push(1500);
+  const pE = app.probeDrop(...WORST); await sleep(150);
+  app.probeDragStart();
+  await app.loadArea("fredericton"); await pE; await sleep(300);
+  const s7 = P();
+  record("P7 area switch mid-drag and mid-calculation: drag cancelled, map pan restored, nothing applied",
+    !s7.shown && !s7.dragging && s7.dragPan && s7.state === "none" && s7.probeFeatures === 0, s7);
+
+  await app.loadArea("tantallon"); app.select(99); await sleep(1200);
+  await app.probeDrop(...OTHER); await done();
+  app.fire("hist"); await sleep(300);
+  const s8 = P();
+  app.unfire(); await sleep(300);
+  record("P8 entering a scenario drops the placed blockage (vulnerability-only tool)", !s8.shown && s8.probeFeatures === 0, s8);
+  app.probeReset();
+}
+
 async function main() {
   const q = new URLSearchParams(location.search);
   if (q.get("selftest") === "flood") return floodSuite();
   if (q.get("selftest") === "fire") return fireSuite();
   if (q.get("selftest") === "3d") return viewSuite();
   if (q.get("selftest") === "demo") return demoSuite();
+  if (q.get("selftest") === "probe") return probeSuite();
   if (q.get("road")) {                                               // 5. deep link -> Clear
     for (let i = 0; i < 100 && app.state().cardState !== "done"; i++) await sleep(200);
     const before = app.state();
