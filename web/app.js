@@ -100,7 +100,31 @@ const STREET_OPACITY = map.getPaintProperty("streets", "line-opacity");
 let current = null, scanData = null, selected = null;
 let drawing = false, clicks = [];
 let floodOn = false, floodGen = 0, floodData = null, floodInfo = null, floodSavedSel = null, floodSavedBld = null;
-let bldStateN = 0, coverFeatures = 0;
+let bldStateN = 0, coverFeatures = 0, floodAct = 0, coverInstalled = false;
+let bldGen = 0, bldAppliedNs = null;
+// Displayed footprint ids are namespaced per (area, source) so a category id from one source/area can never match a
+// polygon from another, even if MapLibre finishes processing sources out of order. Server ids and counts unchanged.
+const BLD_NS = (area, src) => ((area === "fredericton" ? 2 : 0) + (src === "ms" ? 1 : 0)) * 1e7;
+const bldTest = { completeDelays: [] };         // test-only: delay the post-processing step to simulate a slow worker
+const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+// Resolves once MapLibre has finished processing THIS update of the bld source. sourcedata events don't identify which
+// setData they complete, so after each completion event we check the ids of the polygons MapLibre actually holds:
+// they must be in this update's namespace (or none loaded yet, e.g. zoomed out below the footprint layer).
+function bldProcessed(ns, gen) {
+  return new Promise((res) => {
+    const done = () => { map.off("sourcedata", onData); map.off("idle", check); res(); };
+    const check = () => {
+      if (gen !== bldGen) return done();                                 // superseded: stop listening
+      if (!map.isSourceLoaded("bld")) return;                            // tiles still (re)loading
+      const f = map.querySourceFeatures("bld");
+      if (!f.every((x) => x.id >= ns && x.id < ns + 1e7)) return;       // an earlier update's polygons still loaded
+      done();
+    };
+    const onData = (e) => { if (e.sourceId === "bld") check(); };
+    map.on("sourcedata", onData);
+    map.on("idle", check);                     // also re-check once rendering has settled (no fixed timeout)
+  });
+}
 
 function panelHtml(p) {
   const src = `Count: the higher of OpenStreetMap (${p.homes_osm}) and Microsoft (${p.homes_ms}) building footprints.`;
@@ -143,13 +167,20 @@ let bldShown = { area: null, src: null, ready: false }, bldCats = null, bldPinne
 
 async function loadBuildings(area, src) {
   if (bldShown.area === area && bldShown.src === src) return;
-  bldShown = { area, src, ready: false };      // categories wait until THIS source's polygons are on the map
+  const gen = ++bldGen;
+  bldShown = { area, src, ready: false, gen, ns: BLD_NS(area, src) };   // styling disabled until processed
   map.removeFeatureState({ source: "bld" }); bldStateN = 0;
   const data = await (await fetch(`/api/${area}/buildings/${src}`)).json();
-  if (bldShown.area !== area || bldShown.src !== src) return;      // superseded
-  map.getSource("bld").setData(data);
+  if (gen !== bldGen) return;                                       // superseded before processing began
+  const ns = BLD_NS(area, src);
+  for (const f of data.features) f.id += ns;
+  const processed = bldProcessed(ns, gen);
+  map.getSource("bld").setData(data);          // returning from setData does NOT mean the polygons are replaced
+  await processed;                             // ...wait until MapLibre holds THIS update's polygons
+  const d = bldTest.completeDelays.shift(); if (d) await sleepMs(d);
+  if (gen !== bldGen || bldShown.area !== area || bldShown.src !== src || current !== area) return;   // stale
   bldShown.ready = true;
-  applyBuildingCats();
+  applyBuildingCats();                         // re-reads the CURRENT scenario (flood or selection) at apply time
 }
 
 function applyBuildingCats() {
@@ -160,9 +191,11 @@ function applyBuildingCats() {
   const cats = floodOn ? (floodData && floodData.area === bldShown.area ? floodData.ids[bldShown.src] : null)
                        : (bldCats && bldCats.area === bldShown.area ? bldCats.sources[bldShown.src] : null);
   if (!cats) return;
+  const ns = bldShown.ns;
   for (const cat of ["retain", "cut", "inside"]) for (const id of cats[cat]) {
-    map.setFeatureState({ source: "bld", id }, { cat }); bldStateN++;
+    map.setFeatureState({ source: "bld", id: id + ns }, { cat }); bldStateN++;
   }
+  bldAppliedNs = ns;
   if (floodOn) renderFloodKey(); else renderBuildingInfo();
 }
 
@@ -212,6 +245,7 @@ async function loadArea(name) {
   // clear the old area's building categories and footprints NOW, not when the new footprints arrive
   bldCats = null; bldPinned = null;
   map.removeFeatureState({ source: "bld" }); bldStateN = 0;
+  bldGen++; bldAppliedNs = null;                 // any in-flight footprint load for the old area becomes stale
   map.getSource("bld").setData(empty); bldShown = { area: null, src: null, ready: false };
   current = name;
   document.getElementById("floodBox").classList.toggle("hidden", name !== "fredericton");
@@ -404,6 +438,10 @@ async function runFlood(g) {
 
 async function enterFlood(g) {
   if (current !== "fredericton") return;
+  // every enable / disable / explicit level bumps floodAct, so an older initialization that resumes after an await
+  // (e.g. a slow /flood/info) exits without touching controls, coverage, the slider or the calculation
+  const act = ++floodAct, area = current;
+  const want = g !== undefined ? (+g).toFixed(2) : $("gauge").value;
   if (!floodOn) {
     clearMitigation();
     floodSavedSel = selected;
@@ -419,22 +457,27 @@ async function enterFlood(g) {
     $("floodOnBox").checked = true;
     $("floodCtl").classList.remove("hidden");
     applyBuildingCats();
-    if (!floodInfo) {
-      const info = await (await fetch("/api/fredericton/flood/info")).json();
-      floodInfo = floodInfo || info;
-    }
-    if (!floodOn) return;
-    map.getSource("fl-cover").setData(floodInfo.coverage);   // on every activation, not only the first request
-    coverFeatures = floodInfo.coverage.features.length;
   }
-  if (g !== undefined) $("gauge").value = g;
-  updateGaugeReadout($("gauge").value);
-  return runFlood($("gauge").value);
+  const valid = () => act === floodAct && floodOn && current === area;
+  if (!coverInstalled) {                        // coverage outline, once per activation
+    let info = floodInfo;
+    if (!info) {
+      info = await (await fetch("/api/fredericton/flood/info")).json();
+      if (!valid()) return;                     // obsolete initialization: no state or UI mutation
+      floodInfo = info;
+    }
+    map.getSource("fl-cover").setData(info.coverage);
+    coverFeatures = info.coverage.features.length; coverInstalled = true;
+  }
+  if (!valid()) return;
+  $("gauge").value = want;
+  updateGaugeReadout(want);
+  return runFlood(want);
 }
 
 function exitFlood(restoreSelection = true) {
-  floodGen++;                                   // invalidate any pending scenario request
-  floodOn = false; floodData = null;
+  floodGen++; floodAct++;                       // invalidate pending scenario requests AND initializations
+  floodOn = false; floodData = null; coverInstalled = false;
   FLOOD_LAYERS.filter((l) => l !== "fl-cover").forEach((l) => map.getSource(l).setData(empty));
   FLOOD_LAYERS.forEach((l) => map.setLayoutProperty(l, "visibility", "none"));
   SCAN_OVERLAYS.forEach((l) => map.setLayoutProperty(l, "visibility", "visible"));
@@ -455,7 +498,7 @@ function exitFlood(restoreSelection = true) {
 
 $("floodOnBox").onchange = (e) => (e.target.checked ? enterFlood() : exitFlood());
 $("gauge").oninput = (e) => updateGaugeReadout(e.target.value);
-$("gauge").onchange = (e) => floodOn && runFlood(e.target.value);    // calculate on release, not every step
+$("gauge").onchange = (e) => floodOn && enterFlood(e.target.value);  // on release; an explicit level supersedes older inits
 document.querySelectorAll("#floodCtl .presets button").forEach((b) => (b.onclick = () => enterFlood(b.dataset.g)));
 
 map.on("click", "nb-fill", (e) => { if (!drawing && !floodOn) select(e.features[0].id); });
@@ -473,6 +516,26 @@ if (q.get("road")) {
   if (v.length === 4 && v.every(Number.isFinite)) { clicks = [[v[0], v[1]], [v[2], v[3]]]; runMitigation(); }
 }
 window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
+  bldTest, reapply: () => applyBuildingCats(),
+  resetFloodInfo() { floodInfo = null; coverInstalled = false; coverFeatures = 0; },   // test-only: fresh first activation
+  gaugeValue: () => $("gauge").value,
+  bldCheck() {   // what MapLibre actually holds: loaded polygons' namespaces and their category states
+    const feats = map.querySourceFeatures("bld");
+    const byNs = {}, wrong = [];
+    const expect = floodOn ? (floodData ? floodData.ids[bldShown.src] : null) : (bldCats ? bldCats.sources[bldShown.src] : null);
+    const expCat = new Map();
+    if (expect) for (const c of ["retain", "cut", "inside"]) for (const id of expect[c]) expCat.set(id, c);
+    const seen = new Set();
+    for (const f of feats) {
+      if (seen.has(f.id)) continue; seen.add(f.id);
+      const ns = Math.floor(f.id / 1e7) * 1e7;
+      byNs[ns] = (byNs[ns] || 0) + 1;
+      const st = map.getFeatureState({ source: "bld", id: f.id }).cat;
+      if (st && (ns !== bldShown.ns || expCat.get(f.id - ns) !== st)) wrong.push({ id: f.id, ns, st });
+    }
+    return { src: bldShown.src, ready: bldShown.ready, ns: bldShown.ns, appliedNs: bldAppliedNs, states: bldStateN,
+             loadedByNs: byNs, loaded: seen.size, wrongStates: wrong.length, wrongSample: wrong.slice(0, 3) };
+  },
   map, select, loadArea, clear: clearMitigation,
   propose(a, b) { clearMitigation(); clicks = [a, b]; return runMitigation(); },
   flood: (g) => enterFlood(g), unflood: () => exitFlood(),
