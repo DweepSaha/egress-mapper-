@@ -168,7 +168,9 @@ def _scenario(area: engine.Area, gauge_m: float) -> dict:
         counts=counts, headline={k: max(v.values()) for k, v in counts.items()},   # frozen higher-of-two rule
         ids={s: {k: sorted(int(i) for i in v) for k, v in (("cut", cut[s]), ("inside", inside[s]), ("retain", retain[s]))}
              for s in engine.SOURCES},                                            # plain ints (JSON-safe)
-        water=fc([dict(type="Feature", properties={}, geometry=mapping(transform(to_ll, water.simplify(3))))]),
+        # display outline only (analysis uses the unsimplified polygon); 1 m keeps every building centre on the
+        # same side of the drawn edge as in the analysis
+        water=fc([dict(type="Feature", properties={}, geometry=mapping(transform(to_ll, water.simplify(1))))]),
         roads_affected=fc([dict(type="Feature", properties={}, geometry=mapping(transform(to_ll, f))) for f in flooded]),
         cut_roads=fc([dict(type="Feature", properties={}, geometry=mapping(transform(to_ll, l))) for l in cut_lines]),
     )

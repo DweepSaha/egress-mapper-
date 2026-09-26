@@ -343,8 +343,10 @@ function floodHtml(s) {
     <div class="cut">Roads affected under this scenario: <b>${s.roads_affected_km} km</b> (cyan).</div>
     <div class="cut">Mapped buildings that lose access: <b>${fmt(c.lose_access)}</b> — outside the water area, but every
       route to a major road crosses it (orange).</div>
-    <div class="cut">Mapped buildings inside the supplied inundation area: <b>${fmt(c.inside)}</b> (violet).</div>
+    <div class="cut">Mapped buildings with the building centre inside the supplied inundation area: <b>${fmt(c.inside)}</b> (violet).</div>
     <div class="cut">Mapped buildings that keep access: ${fmt(c.keep_access)} (teal).</div>
+    <div class="src">Building status is classified by its centre; buildings along the water's edge may partially overlap
+      the inundation area.</div>
     <div class="src">This is not a flood prediction. The river level is your input; the water is a flat surface at
       ${s.water_cgvd2013_m.toFixed(2)} m (CGVD2013) connected to the river channel — no river slope, flood defences or
       drainage. Elevation data covers the river corridor only (dashed outline); roads outside it are treated as dry.
