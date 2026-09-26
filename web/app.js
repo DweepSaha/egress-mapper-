@@ -142,19 +142,54 @@ function bldProcessed(ns, gen) {
   });
 }
 
+// ---------- analytics panel building blocks: display only, every number is an audited API field ----------
+const N = (v) => (v === null || v === undefined ? "—" : Number(v).toLocaleString());
+const pairTxt = (o, m) => `OSM ${N(o)} · Microsoft ${N(m)}`;
+const INDEP = `<div class="indep">OpenStreetMap and Microsoft are independent footprint estimates, never added together.</div>`;
+const metric = (v, label, cls = "", sub = "") => `<div class="m ${cls}">
+  <div class="mv">${v}</div>
+  <div class="ml">${label}</div>${sub ? `
+  <div class="msub">${sub}</div>` : ""}</div>`;
+// two independent estimates side by side, each bar scaled to the larger of the two (never summed)
+function srcBars(o, m, head) {
+  const mx = Math.max(o, m, 1), row = (l, v) => `<div class="sb"><span class="sbl">${l}</span>
+    <span class="sbt"><i style="width:${(v / mx) * 100}%"></i></span><span class="sbn">${N(v)}</span></div>`;
+  return `<div class="blk"><div class="bh">${head}</div>${row("OpenStreetMap", o)}${row("Microsoft", m)}${INDEP}</div>`;
+}
+// status distribution per source: one stacked bar per source (each is 100% of that source) + a small table
+function distBlock(head, rows, c, indep = true) {
+  const bar = (src) => {
+    const tot = rows.reduce((a, r) => a + c[r.key][src], 0) || 1;
+    return `<div class="dist">${rows.map((r) => c[r.key][src]
+      ? `<i class="${r.cls}" style="width:${(c[r.key][src] / tot) * 100}%"></i>` : "").join("")}</div>`;
+  };
+  return `<div class="blk"><div class="bh">${head}</div>
+    <div class="dsrc"><span>OSM</span>${bar("osm")}</div><div class="dsrc"><span>Microsoft</span>${bar("ms")}</div>
+    <table class="dt"><tr><th></th><th>OSM</th><th>Microsoft</th></tr>${rows.map((r) =>
+      `<tr><td><span class="k ${r.cls}"></span>${r.label}</td><td>${N(c[r.key].osm)}</td><td>${N(c[r.key].ms)}</td></tr>`).join("")}</table>
+    ${indep ? INDEP : ""}</div>`;
+}
+const STATUS_TXT = { red: "One blocked road area cuts off 30+ mapped buildings",
+  amber: "One blocked road area cuts off 1–29 mapped buildings",
+  green: "None of the sampled blockages cuts anyone off", not_assessed: "Too close to the edge of our road data to judge fairly" };
+const STATUS_TAG = { red: "RED", amber: "AMBER", green: "GREEN", not_assessed: "NOT ASSESSED" };
+
 function panelHtml(p) {
-  const src = `Count: the higher of OpenStreetMap (${p.homes_osm}) and Microsoft (${p.homes_ms}) building footprints.`;
-  let body;
-  if (p.status === "not_assessed")
-    body = `<div class="cut">Not assessed: too close to the edge of our road data to judge fairly.</div>`;
-  else if (p.worst_cut > 0)
-    body = `<div class="cut">If this road area is blocked, <b>${p.worst_cut}</b> could lose their way out to a major road.</div>
-            <div class="src">Choke point shown on the map (white circle). Streets that would lose their way out are in bright red.</div>`;
-  else
-    body = `<div class="cut">None of the sampled blockages cuts these buildings off from a major road.</div>`;
-  return `<div class="big">${p.homes} mapped buildings in this neighbourhood</div>${body}
-          <div class="src">Connects to major roads at ${p.gateways} point${p.gateways === 1 ? "" : "s"}.</div>
-          <div class="src">${src}</div>`;
+  const na = p.status === "not_assessed";
+  const affected = na
+    ? metric("—", "affected: not assessed", "na")
+    : metric(N(p.worst_cut), "lose access if the worst sampled blockage occurs", p.worst_cut > 0 ? "cut" : "",
+             pairTxt(p.worst_cut_osm, p.worst_cut_ms));
+  return `<div class="kicker">Access vulnerability</div>
+    <div class="stag ${p.status}"><b>${STATUS_TAG[p.status]}</b> ${STATUS_TXT[p.status]}</div>
+    <div class="mgrid3">
+      ${metric(N(p.homes), "mapped buildings in this neighbourhood", "", pairTxt(p.homes_osm, p.homes_ms))}
+      ${affected}
+      ${metric(N(p.gateways), `connection${p.gateways === 1 ? "" : "s"} to major roads`)}
+    </div>
+    ${!na && p.worst_cut > 0 ? `<div class="note">If this road area is blocked (white circle on the map), streets shown in
+      bright red lose their way out to a major road. This is the worst of the sampled blockages, not an absolute worst case.</div>` : ""}
+    ${srcBars(p.homes_osm, p.homes_ms, "Mapped buildings: source comparison")}`;
 }
 
 function select(nid) {
@@ -164,7 +199,7 @@ function select(nid) {
   selected = nid;
   const f = scanData.neighbourhoods.features.find((f) => f.id === nid);
   const panel = document.getElementById("panel");
-  if (!f) { panel.classList.add("hidden"); updateChokeFilter(); return; }
+  if (!f) { panel.classList.add("hidden"); updateChokeFilter(); syncMode(); return; }
   map.setFeatureState({ source: "streets", id: nid }, { selected: true });
   panel.className = `card ${f.properties.status}`;
   panel.innerHTML = panelHtml(f.properties) + `<div id="bldInfo"></div>`;
@@ -221,12 +256,14 @@ function applyBuildingCats() {
 function renderBuildingInfo() {
   const el = document.getElementById("bldInfo");
   if (!el || !bldCats) return;
-  const s = bldCats.sources[bldShown.src], p = bldCats.props;
+  const s = bldCats.sources, p = bldCats.props;
+  const cnt = (k) => ({ osm: s.osm[k].length, ms: s.ms[k].length });
   const btn = (src) => `<button data-src="${src}" class="${src === bldShown.src ? "on" : ""}">${SRC_LABEL[src]} (${src === "osm" ? p.homes_osm : p.homes_ms})</button>`;
-  el.innerHTML = `<div class="bldsrc">Footprints shown: ${btn("osm")}${btn("ms")}</div>
-    ${bldCats.choke ? `<div class="bldkey"><span class="k cut"></span>lose access (${s.cut.length})
-      <span class="k inside"></span>inside the blocked area (${s.inside.length})
-      <span class="k retain"></span>keep access (${s.retain.length})</div>` : ""}
+  el.innerHTML = `${bldCats.choke ? distBlock("Under the worst sampled blockage", [
+      { cls: "cut", label: "Lose access", key: "cut" },
+      { cls: "inside", label: "Inside the blocked area", key: "inside" },
+      { cls: "retain", label: "Retain access", key: "retain" }], { cut: cnt("cut"), inside: cnt("inside"), retain: cnt("retain") }, false) : ""}
+    <div class="bldsrc">Footprints on the map: ${btn("osm")}${btn("ms")}</div>
     ${bldCats.matches_scan === false ? `<div class="src">Note: building display does not match the scan counts.</div>` : ""}`;
   el.querySelectorAll("button[data-src]").forEach((b) => (b.onclick = () => {
     bldPinned = b.dataset.src; loadBuildings(bldShown.area, bldPinned).then(renderBuildingInfo);
@@ -238,6 +275,7 @@ async function showBuildings(nid, props) {
   const cats = await (await fetch(`/api/${area}/nb/${nid}/buildings`)).json();
   if (area !== current || nid !== selected) return;
   bldCats = { ...cats, area, props };
+  renderBuildingInfo();                        // the counts come from the API: show them before the footprints finish loading
   // default to the source that gives the headline count (the higher of the two), unless the viewer picked one
   const src = bldPinned || (props.homes_ms > props.homes_osm ? "ms" : "osm");
   if (bldShown.src !== src || bldShown.area !== area) await loadBuildings(area, src);
@@ -250,13 +288,36 @@ function updateChokeFilter() {
                           ["==", ["get", "nid"], selected ?? -1]]);
 }
 
-function renderRanking() {
-  const ol = document.getElementById("ranking");
-  const top = scanData.neighbourhoods.features.filter((f) => f.properties.rank !== null)
-    .sort((a, b) => a.properties.rank - b.properties.rank).slice(0, 8);
-  ol.innerHTML = top.map((f) => `<li data-nid="${f.id}"><span class="n">${f.properties.worst_cut}</span> of
-    ${f.properties.homes} mapped buildings could lose their way out</li>`).join("") || "<li>None</li>";
-  ol.querySelectorAll("li[data-nid]").forEach((li) => (li.onclick = () => select(+li.dataset.nid)));
+function renderOverview() {
+  const el = $("overview"), c = scanData.summary.counts, n = (k) => c[k] || 0;
+  const total = n("red") + n("amber") + n("green") + n("not_assessed"), assessed = total - n("not_assessed");
+  const ranked = scanData.neighbourhoods.features.filter((f) => f.properties.rank !== null)
+    .sort((a, b) => a.properties.rank - b.properties.rank);
+  const lead = ranked.length ? ranked[0].properties : null;
+  const seg = ["red", "amber", "green", "not_assessed"].map((k) => n(k)
+    ? `<i class="s-${k}" style="width:${(n(k) / (total || 1)) * 100}%"></i>` : "").join("");
+  const leg = [["red", "30+ cut off"], ["amber", "1–29 cut off"], ["green", "none cut off"], ["not_assessed", "not assessed"]]
+    .map(([k, l]) => `<div><span class="k s-${k}"></span><b>${n(k)}</b> ${l}</div>`).join("");
+  const top = ranked.slice(0, 5).map((f) => {
+    const q = f.properties;
+    return `<button class="toprow" data-nid="${f.id}"><span class="tr">#${q.rank}</span>
+      <span class="tb"><i style="width:${(q.worst_cut / Math.max(q.homes, 1)) * 100}%"></i></span>
+      <span class="tn"><b>${N(q.worst_cut)}</b> of ${N(q.homes)}</span></button>`;
+  }).join("");
+  el.innerHTML = `<div class="kicker">Area overview</div>
+    <div class="big">${areas[current].label}</div>
+    <div class="mgrid2">
+      ${metric(N(total), "neighbourhoods of 30+ mapped buildings")}
+      ${metric(N(assessed), "assessed", "", `${N(n("not_assessed"))} not assessed (edge of road data)`)}
+    </div>
+    <div class="blk"><div class="bh">Vulnerability status</div><div class="dist tall">${seg}</div><div class="leg">${leg}</div></div>
+    ${lead ? `<div class="blk"><div class="bh">Largest sampled blockage impact</div>
+      ${metric(N(lead.worst_cut), `mapped buildings cut off by one blocked road area (of ${N(lead.homes)} in that neighbourhood)`,
+               "cut", pairTxt(lead.worst_cut_osm, lead.worst_cut_ms))}</div>` : ""}
+    <div class="blk"><div class="bh">Most vulnerable neighbourhoods</div>
+      <div class="fine">Mapped buildings cut off by the worst sampled blockage, of the neighbourhood total. Click to open.</div>
+      ${top || `<div class="fine">None.</div>`}</div>`;
+  el.querySelectorAll(".toprow").forEach((b) => (b.onclick = () => select(+b.dataset.nid)));
 }
 
 async function loadArea(name) {
@@ -288,7 +349,7 @@ async function loadArea(name) {
   map.setFilter("cut", ["==", ["get", "nid"], -1]);
   map.setFilter("blocked", ["==", ["get", "nid"], -1]);
   updateChokeFilter();
-  renderRanking();
+  renderOverview();
   renderSummary();
   syncMode();
   map.jumpTo({ center: areas[name].center, zoom: areas[name].zoom });
@@ -332,18 +393,35 @@ function startDrawing() {
 }
 
 function mitigHtml(r) {
-  if (!r.ok) return `<div class="cut">${r.message}</div>`;
+  if (!r.ok) return `<div class="kicker">Mitigation test</div><div class="cut">${r.message}</div>`;
   const b = r.before, a = r.after;
-  const road = `<div class="src">Proposed road: ${r.length_m.toLocaleString()} m between the nearest existing road
-    junctions or road ends. Conceptual straight-line connection; construction feasibility not assessed.</div>`;
-  const beforeTxt = `<div class="cut">Before: if this road area is blocked, ${b.worst_cut} of ${b.homes} mapped buildings
-    could lose their way out to a major road.</div>`;
-  if (r.unavailable) return `<div class="big">Result unavailable</div>${beforeTxt}<div class="cut">${r.message}</div>${road}`;
-  const after = a.worst_cut > 0
-    ? `For these same mapped buildings, the worst sampled blockage with the road cuts off <b>${a.worst_cut}</b> (shown in blue).`
-    : `For these same mapped buildings, none of the sampled blockages cuts them off with the road.`;
-  return `<div class="big">${r.regained} of ${b.worst_cut} mapped buildings regain access under this blockage</div>
-    ${beforeTxt}<div class="cut">${after}</div>${road}`;
+  const road = `<div class="conn"><b>${N(r.length_m)} m</b> conceptual straight-line connection
+    <div class="fine">Construction feasibility not assessed. Each end joins the nearest existing road junction or road end.</div></div>`;
+  if (r.unavailable) return `<div class="kicker">Mitigation test</div><div class="big">Result unavailable</div>
+    ${metric(N(b.worst_cut), "lose access under the original worst sampled blockage", "cut", pairTxt(r.before_cut_src?.osm, r.before_cut_src?.ms))}
+    <div class="cut">${r.message}</div>${road}`;
+  const w = (v) => `${(v / Math.max(b.worst_cut, 1)) * 100}%`;
+  const residual = a.worst_cut > 0
+    ? metric(N(a.worst_cut), "mapped buildings affected by the worst sampled blockage with the connection (can be a different road area; shown in blue)",
+             "cut", pairTxt(a.worst_cut_src?.osm, a.worst_cut_src?.ms))
+    : metric("0", "none of the sampled blockages cuts these mapped buildings off with the connection", "retain");
+  return `<div class="kicker">Mitigation test</div>
+    <div class="big">${N(r.regained)} of ${N(b.worst_cut)} regain access under this blockage</div>
+    <div class="ba">
+      <div class="bacol">${metric(N(b.worst_cut), "BEFORE: lose access under this blockage", "cut", pairTxt(r.before_cut_src.osm, r.before_cut_src.ms))}</div>
+      <div class="baarrow">→</div>
+      <div class="bacol">${metric(N(r.same_block_cut), "AFTER: remain without access under this blockage", r.same_block_cut > 0 ? "cut" : "retain",
+                                  pairTxt(r.same_block_cut_src.osm, r.same_block_cut_src.ms))}</div>
+    </div>
+    <div class="babars">
+      <div class="dsrc"><span>Before</span><div class="dist"><i class="cut" style="width:100%"></i></div></div>
+      <div class="dsrc"><span>After</span><div class="dist"><i class="cut" style="width:${w(r.same_block_cut)}"></i><i class="retain" style="width:${w(r.regained)}"></i></div></div>
+    </div>
+    ${metric(N(r.regained), "regain access under this same blockage", "retain", pairTxt(r.regained_src.osm, r.regained_src.ms))}
+    <div class="blk resid"><div class="bh">Residual vulnerability</div>${residual}
+      <div class="fine">A separate result: the new worst sampled blockage for the same ${N(b.homes)} mapped buildings.
+        With the connection, the worst sampled blockage cuts off ${N(a.worst_cut)}.</div></div>
+    ${road}`;
 }
 
 async function runMitigation() {
@@ -406,29 +484,37 @@ function updateGaugeReadout(g) {
 
 function floodHtml(s) {
   const c = s.counts;
-  return `<div class="big">Supplied river level ${s.gauge_m.toFixed(2)} m (gauge)</div>
-    <div class="cut">Roads affected under this scenario: <b>${s.roads_affected_km} km</b> (cyan).</div>
-    <div class="cut">Mapped buildings that lose access: <b>${fmt(c.lose_access)}</b> — outside the water area, but every
-      route to a major road crosses it (orange).</div>
-    <div class="cut">Mapped buildings with the building centre inside the supplied inundation area: <b>${fmt(c.inside)}</b> (violet).</div>
-    <div class="cut">Mapped buildings that keep access: ${fmt(c.keep_access)} (teal).</div>
-    <div class="src">Building status is classified by its centre; buildings along the water's edge may partially overlap
-      the inundation area. Access counts cover assessed neighbourhoods of 30+ mapped buildings (as in the vulnerability
-      scan); the "centre inside" count covers every mapped building in the water area.</div>
-    <div class="src">This is not a flood prediction. The river level is your input; the water is a flat surface at
-      ${s.water_cgvd2013_m.toFixed(2)} m (CGVD2013) connected to the river channel — no river slope, flood defences or
-      drainage. Elevation data covers the river corridor only (dashed outline); roads outside it are treated as dry.
-      Bridges are treated as passable. Gauge height is converted with ${s.offset_m} m (NRCan conversion grid); this
-      offset is consistent with 2008 observations but not proven, and historical datum conversions carry some
-      uncertainty. The terrain is a 2024 survey, so it may not match 2008 ground (e.g. later regrading) when used with
-      the 2008 reference. The vulnerability classification is not changed by this scenario.</div>`;
+  return `<div class="kicker">Flood scenario</div>
+    <div class="nopredict">This is not a flood prediction.</div>
+    <div class="fine">Supplied river level ${s.gauge_m.toFixed(2)} m (gauge)</div>
+    <div class="mgrid2">
+      ${metric(`${s.gauge_m.toFixed(2)} m`, "supplied gauge level (CGVD28, station 01AK003)", "flood")}
+      ${metric(`~${s.water_cgvd2013_m.toFixed(2)} m`, "project CGVD2013 conversion", "flood", `offset ${s.offset_m} m`)}
+      ${metric(`${s.roads_affected_km} km`, "road portions affected", "froad")}
+      ${metric(N(Math.max(c.lose_access.osm, c.lose_access.ms)), "outside the inundation, lose access", "cut", pairTxt(c.lose_access.osm, c.lose_access.ms))}
+    </div>
+    ${distBlock("Mapped buildings by status", [
+      { cls: "inside", label: "Centre inside supplied inundation", key: "inside" },
+      { cls: "cut", label: "Outside inundation, loses access", key: "lose_access" },
+      { cls: "retain", label: "Retains access", key: "keep_access" }], c)}
+    <details class="src"><summary>Model assumptions</summary><ul class="assume">
+      <li>The river level is your input; the water is a flat surface at ${s.water_cgvd2013_m.toFixed(2)} m (CGVD2013)
+        connected to the river channel. No hydraulic flow, river slope, flood defences or drainage.</li>
+      <li>Gauge height converted with ${s.offset_m} m (NRCan conversion grid). Consistent with 2008 observations but not
+        proven; historical datum conversions carry some uncertainty.</li>
+      <li>Terrain is the 2024 NRCan HRDEM survey, which may not match 2008 ground (e.g. later regrading).</li>
+      <li>Elevation data covers the river corridor only (dashed outline); roads outside it are treated as dry.</li>
+      <li>Bridges are treated as passable.</li>
+      <li>Buildings are classified by their centre; buildings at the water's edge may partly overlap it. Access counts cover
+        assessed neighbourhoods of 30+ mapped buildings (as in the vulnerability scan); "centre inside" covers every
+        mapped building in the water area. The vulnerability classification is not changed.</li></ul></details>`;
 }
 
 function renderFloodKey() {
   const el = $("floodBld");
   if (!el || !floodData) return;
   const btn = (src) => `<button data-src="${src}" class="${src === bldShown.src ? "on" : ""}">${SRC_LABEL[src]}</button>`;
-  el.innerHTML = `<div class="bldsrc">Footprints shown: ${btn("osm")}${btn("ms")}</div>`;
+  el.innerHTML = `<div class="bldsrc">Footprints on the map: ${btn("osm")}${btn("ms")}</div>`;
   el.querySelectorAll("button[data-src]").forEach((b) => (b.onclick = () => {
     bldPinned = b.dataset.src; loadBuildings(current, bldPinned).then(renderFloodKey);
   }));
@@ -538,31 +624,36 @@ const FIRE_KEY = `<div class="firekey">
   <div><span class="k retain"></span>Retains access</div></div>`;
 
 function fireHtml(s) {
-  const c = s.counts;
-  const head = s.kind === "historical"
-    ? `<div class="big">Mapped 2023 fire perimeter</div>
-       <div class="src">Published NBAC area ${s.perimeter.mapped_ha} ha · fire starting ${s.perimeter.start_date}</div>`
-    : `<div class="big">Supplied hypothetical affected area</div>
-       <div class="src">Radius ${s.radius_m.toLocaleString()} m (${s.zone_ha} ha) · your input, not a predicted fire extent</div>`;
-  const ents = s.kind === "historical"
-    ? `<div class="fnote">Westwood Hills entrances: outside the perimeter, about
-       ${s.westwood_entrances.map((e) => e.distance_m).sort((a, b) => a - b).map(km).join(" and ")} away.</div>` : "";
+  const c = s.counts, hist = s.kind === "historical";
+  const head = hist
+    ? `<div class="kicker">2023 mapped burned-area perimeter</div><div class="big">Mapped 2023 fire perimeter</div>
+       <div class="mgrid2">
+         ${metric(`${s.perimeter.mapped_ha} ha`, "published NBAC area", "fire", `fire starting ${s.perimeter.start_date}`)}
+         ${metric(`${s.roads_affected_km} km`, "road portions within the mapped area", "froad-f")}
+       </div>`
+    : `<div class="kicker">Supplied affected area</div><div class="big">Supplied hypothetical affected area</div>
+       <div class="mgrid2">
+         ${metric(`${s.radius_m.toLocaleString()} m`, "supplied affected radius", "fire", `${s.zone_ha} ha · your input, not a predicted fire extent`)}
+         ${metric(`${s.roads_affected_km} km`, "road portions within the supplied affected area", "froad-f")}
+       </div>`;
+  const ents = hist
+    ? `<div class="fnote">Neither Westwood Hills entrance lies inside the mapped perimeter (about
+       ${s.westwood_entrances.map((e) => e.distance_m).sort((a, b) => a - b).map(km).join(" and ")} away).</div>
+       <div class="fine">Model result using the retrospective mapped perimeter as a supplied affected area. NBAC is a
+         retrospective burned-area outline, not a time-resolved record of how the fire progressed on May 28.</div>` : "";
   return `${head}
-    <div class="fstats">
-      <div class="fs road"><span class="n">${s.roads_affected_km} km</span>
-        <span class="l">road portions within the supplied affected area</span></div>
-      ${stat("cut", "outside the area, lose access", c.lose_access)}
-      ${stat("inside", "centre inside the area", c.inside)}
-      ${stat("retain", "retain access", c.keep_access)}
-    </div>
-    ${ents}
     <div class="nopredict">This tool does not predict fire spread.</div>
+    ${distBlock("Mapped buildings by status", [
+      { cls: "inside", label: "Centre inside the area", key: "inside" },
+      { cls: "cut", label: "Outside the area, loses access", key: "lose_access" },
+      { cls: "retain", label: "Retains access", key: "keep_access" }], c)}
+    ${ents}
     ${FIRE_KEY}
     <details class="src"><summary>How this is counted</summary>
       Roads are treated as impassable only within the supplied area; no wind, weather, fire behaviour, traffic or
       evacuation time is modelled. Buildings are classified by their centre. Access counts cover assessed
       neighbourhoods of 30+ mapped buildings (as in the vulnerability scan); the centre-inside count covers every
-      mapped building in the area.${s.kind === "historical" ? ` Area: the published NBAC figure (${s.perimeter.mapped_ha} ha)
+      mapped building in the area.${hist ? ` Area: the published NBAC figure (${s.perimeter.mapped_ha} ha)
       is measured on the curved Earth; this tool measures the same outline on its flat map as ${s.zone_ha} ha
       (about 0.1% larger from map distortion this far from New Brunswick). The outline is unchanged.` : ""}</details>`;
 }
@@ -571,7 +662,7 @@ function renderFireKey() {
   const el = $("fireBld");
   if (!el || !fireData) return;
   const btn = (src) => `<button data-src="${src}" class="${src === bldShown.src ? "on" : ""}">${SRC_LABEL[src]}</button>`;
-  el.innerHTML = `<div class="bldsrc">Footprints shown: ${btn("osm")}${btn("ms")}</div>`;
+  el.innerHTML = `<div class="bldsrc">Footprints on the map: ${btn("osm")}${btn("ms")}</div>`;
   el.querySelectorAll("button[data-src]").forEach((b) => (b.onclick = () => {
     bldPinned = b.dataset.src; loadBuildings(current, bldPinned).then(renderFireKey);
   }));
@@ -677,10 +768,10 @@ function syncMode() {
   $("vulnBox").classList.toggle("hidden", floodOn || fireOn);
   $("floodBox").classList.toggle("hidden", !floodOn);
   $("fireBox").classList.toggle("hidden", !fireOn);
-  $("rankBox").classList.toggle("hidden", floodOn || fireOn);
+  $("overview").classList.toggle("hidden", floodOn || fireOn || selected !== null);
   $("anaCtx").textContent =
     fireOn && fireMode === "hyp" && !fireCentre ? "Click the map to place the supplied affected area."
-    : !floodOn && !fireOn && selected === null && !drawing ? "Select a neighbourhood on the map or from the list below."
+    : !floodOn && !fireOn && selected === null && !drawing ? "Select a neighbourhood on the map or from the list."
     : "";
 }
 function renderSummary() {
@@ -720,6 +811,16 @@ if (q.get("nid")) select(+q.get("nid"));
 if (q.get("road")) {
   const v = q.get("road").split(",").map(Number);
   if (v.length === 4 && v.every(Number.isFinite)) { clicks = [[v[0], v[1]], [v[2], v[3]]]; runMitigation(); }
+}
+// scenario deep links (demo backup): &mode=flood[&gauge=8.36] on Fredericton; &mode=fire&fire=hist|hyp[&c=lon,lat&r=500] on Tantallon
+if (q.get("mode") === "flood" && current === "fredericton") {
+  const g = Number(q.get("gauge"));
+  enterFlood(q.get("gauge") && g >= +$("gauge").min && g <= +$("gauge").max ? g : undefined);
+} else if (q.get("mode") === "fire" && current === "tantallon") {
+  const c = (q.get("c") || "").split(",").map(Number), r = Number(q.get("r"));
+  if (r >= +$("fireRadius").min && r <= +$("fireRadius").max) { $("fireRadius").value = r; $("fireRadiusVal").textContent = `${r.toLocaleString()} m`; }
+  if (c.length === 2 && c.every(Number.isFinite)) fireCentre = c;
+  enterFire(q.get("fire") === "hist" ? "hist" : "hyp");
 }
 window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
   bldTest, reapply: () => applyBuildingCats(),

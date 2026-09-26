@@ -167,7 +167,7 @@ async function fireSuite() {
   app.fire("hist"); await waitDone();
   const h = app.fireState(), vh = vis();
   record("X2 historical card", h.on && h.mode === "hist" && h.cardText.includes("Mapped 2023 fire perimeter") &&
-         h.cardText.includes("Westwood Hills entrances: outside the perimeter") && h.cardText.includes("0.96 km and 1.22 km") && h.cardText.includes("This tool does not predict fire spread") &&
+         h.cardText.includes("Neither Westwood Hills entrance lies inside the mapped perimeter") && h.cardText.includes("0.96 km and 1.22 km") && h.cardText.includes("This tool does not predict fire spread") &&
          FIRE.every((l) => vh[l] === "visible") && SCAN.every((l) => vh[l] === "none"), { card: h.cardText.slice(0, 200), vh });
 
   // X3 hypothetical: two radii, first answers LAST -> only the newer one is shown
@@ -176,7 +176,7 @@ async function fireSuite() {
   await sleep(3200); await waitDone();
   const x3 = app.fireState();
   record("X3 reversed hypothetical responses", arrivals.join(",") === "fire r=300,fire r=1500" &&
-         x3.cardText.includes("Radius 300 m") && !x3.cardText.includes("1,500 m") &&
+         x3.cardText.includes("300 m supplied affected radius") && !x3.cardText.includes("1,500 m") &&
          x3.cardText.includes("not a predicted fire extent"), { arrivals: arrivals.slice(), card: x3.cardText.slice(0, 120) });
 
   // X4 mode switch while pending: the old hypothetical answer must not overwrite the historical card
@@ -185,7 +185,7 @@ async function fireSuite() {
   await sleep(2500); await waitDone();
   const x4 = app.fireState();
   record("X4 mode switch while pending", x4.mode === "hist" && x4.cardText.includes("Mapped 2023 fire perimeter") &&
-         !x4.cardText.includes("Radius 800"), { arrivals: arrivals.slice(), card: x4.cardText.slice(0, 80) });
+         !x4.cardText.includes("800 m supplied affected radius"), { arrivals: arrivals.slice(), card: x4.cardText.slice(0, 80) });
 
   // X5 exit restores the vulnerability view and selection exactly
   app.unfire(); await sleep(300);

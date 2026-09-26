@@ -47,8 +47,7 @@
 
     <section id="vulnBox">
       <h2>Parameters</h2>
-      <p class="lede">Tests localized road blockages across each neighbourhood and finds where one blocked road area
-        would cut the most mapped buildings off from a major road.</p>
+      <p class="lede">Tests localized road blockages across each neighbourhood.</p>
       <div id="tools">
         <button id="drawBtn">Test a new road</button>
         <button id="clearBtn" class="hidden">Clear</button>
@@ -60,19 +59,19 @@
         <div><span class="sw amber"></span>One blocked area cuts off 1–29 mapped buildings</div>
         <div><span class="sw green"></span>None of the sampled blockages cuts anyone off</div>
         <div><span class="sw grey"></span>Not assessed (edge of road data)</div>
-        <div class="note">Brighter red streets = more buildings could be cut off. Only neighbourhoods with 30+ mapped
-          buildings are shown.</div>
       </div>
-      <p class="fine">Blocked area: a circle 100 m across, tested every 50 m along the roads. The blockage is a
-        hypothetical input — this tool does not predict hazards, traffic or evacuation times.</p>
+      <details class="method"><summary>Method / assumptions</summary>
+        <p>Blocked area: a circle 100 m across, tested every 50 m along the roads. The blockage is a hypothetical
+          input; this tool does not predict hazards, traffic or evacuation times.</p>
+        <p>Only neighbourhoods with 30+ mapped buildings are shown. Brighter red streets = more mapped buildings could
+          be cut off. Counts use the higher of the OpenStreetMap and Microsoft footprint estimates, never their sum.</p>
+      </details>
     </section>
 
     <section id="floodBox" class="hidden">
       <h2>Flood parameters</h2>
       <div id="floodCtl" class="hidden">
         <p class="warn">This is not a flood prediction.</p>
-        <p class="fine">You choose the river level. This shows road access under that level; it does not change the
-          vulnerability classification.</p>
         <div class="gaugehead">Supplied river level: <b id="gaugeVal">8.36 m gauge height</b></div>
         <input type="range" id="gauge" min="5" max="9.5" step="0.01" value="8.36" list="gaugeTicks">
         <datalist id="gaugeTicks"><option value="6.5"></option><option value="8.36"></option></datalist>
@@ -81,8 +80,12 @@
           <button data-g="6.5">Flood stage · 6.5 m gauge</button>
           <button data-g="8.36">2008 peak · 8.36 m gauge</button>
         </div>
-        <p class="fine">Gauge heights at Saint John River at Fredericton (station 01AK003, CGVD28). The elevation model uses
-          CGVD2013; the conversion is shown under the slider.</p>
+        <details class="method"><summary>Method / assumptions</summary>
+          <p>You choose the river level; the map shows road access under it. The vulnerability classification is not
+            changed.</p>
+          <p>Gauge heights at Saint John River at Fredericton (station 01AK003, CGVD28). The elevation model uses
+            CGVD2013; the conversion is shown under the slider. Full assumptions are listed with the results.</p>
+        </details>
       </div>
     </section>
 
@@ -90,8 +93,6 @@
       <h2>Fire parameters</h2>
       <div id="fireCtl" class="hidden">
         <p class="warn">This tool does not predict fire spread.</p>
-        <p class="fine">You supply the affected area; the map shows road access under it. The vulnerability
-          classification is not changed.</p>
         <div class="presets" id="fireModes">
           <button data-mode="hyp" class="on">Hypothetical area</button>
           <button data-mode="hist">Mapped 2023 fire perimeter</button>
@@ -101,6 +102,11 @@
           <input type="range" id="fireRadius" min="100" max="2000" step="50" value="500">
           <p class="fine" id="fireHint">Click the map to place the centre. The radius is your input, not a predicted fire extent.</p>
         </div>
+        <details class="method"><summary>Method / assumptions</summary>
+          <p>You supply the affected area; the map shows road access under it. No wind, weather, fire behaviour, traffic
+            or evacuation time is modelled. The vulnerability classification is not changed.</p>
+          <p>The mapped 2023 perimeter is the retrospective NRCan CWFIS NBAC burned-area outline.</p>
+        </details>
       </div>
     </section>
   </aside>
@@ -114,14 +120,11 @@
       <h2>Analytics</h2>
       <div id="anaCtx" class="fine"></div>
     </div>
-    <div id="panel" class="card hidden"></div>
+    <div id="overview" class="card overview"></div>
     <div id="mitig" class="card mitig hidden"></div>
+    <div id="panel" class="card hidden"></div>
     <div id="floodOut" class="card flood"></div>
     <div id="fireOut" class="card fire"></div>
-    <section id="rankBox">
-      <h2>Worst sampled blockages</h2>
-      <ol id="ranking"></ol>
-    </section>
   </aside>
 
   <footer id="bar">
