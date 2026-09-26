@@ -42,6 +42,18 @@ map.addLayer({ id: "roads", type: "line", source: "roads", paint: {
   "line-color": ["case", ["get", "way_out"], "#e8edf2", "#4b5663"],
   "line-width": ["interpolate", ["linear"], ["zoom"], 11, ["case", ["get", "way_out"], 1.4, 0.3],
                  16, ["case", ["get", "way_out"], 4, 1.2]] } });
+// Mapped building footprints (display only). One source at a time (OSM or Microsoft), feature id = engine building
+// id, category set via feature-state so the same source/colour rule can later drive a fill-extrusion (3D) layer.
+map.addSource("bld", { type: "geojson", data: empty });
+const BLD_CAT = ["feature-state", "cat"];
+const BLD_COLOR = ["match", BLD_CAT, "cut", "#ff7a45", "inside", "#c084fc", "retain", "#4fb3a0", "#3b4452"];
+const BLD_OPACITY = ["match", BLD_CAT, "cut", 0.95, "inside", 0.95, "retain", 0.6, 0.35];
+map.addLayer({ id: "bld-fill", type: "fill", source: "bld", minzoom: 12,
+  paint: { "fill-color": BLD_COLOR, "fill-opacity": BLD_OPACITY } }, "roads");
+map.addLayer({ id: "bld-line", type: "line", source: "bld", minzoom: 14,
+  paint: { "line-color": BLD_COLOR, "line-width": 0.6,
+           "line-opacity": ["match", BLD_CAT, "cut", 1, "inside", 1, 0] } }, "roads");
+
 const SEL = ["boolean", ["feature-state", "selected"], false];
 map.addLayer({ id: "streets", type: "line", source: "streets", layout: { "line-cap": "round", "line-join": "round" },
   paint: {
@@ -71,17 +83,6 @@ map.addLayer({ id: "proposal-line", type: "line", source: "proposal", filter: ["
 map.addLayer({ id: "proposal-pts", type: "circle", source: "proposal", filter: ["==", ["geometry-type"], "Point"],
   paint: { "circle-color": "#35c3ff", "circle-radius": 6, "circle-stroke-color": "#fff", "circle-stroke-width": 1.5 } });
 
-// river level scenario layers (Fredericton only)
-for (const s of ["fl-water", "fl-roads", "fl-cut", "fl-cover"]) map.addSource(s, { type: "geojson", data: empty });
-map.addLayer({ id: "fl-cover", type: "line", source: "fl-cover", layout: { visibility: "none" },
-  paint: { "line-color": "#93c5fd", "line-width": 1.2, "line-dasharray": [3, 2], "line-opacity": 0.7 } }, "roads");
-map.addLayer({ id: "fl-water", type: "fill", source: "fl-water", layout: { visibility: "none" },
-  paint: { "fill-color": "#2563eb", "fill-opacity": 0.45 } }, "roads");
-map.addLayer({ id: "fl-roads", type: "line", source: "fl-roads", layout: { visibility: "none", "line-cap": "round" },
-  paint: { "line-color": "#22d3ee", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 6] } });
-map.addLayer({ id: "fl-cut", type: "line", source: "fl-cut", layout: { visibility: "none" },
-  paint: { "line-color": "#ffb020", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4.5] } });
-
 let current = null, scanData = null, selected = null;
 let drawing = false, clicks = [];
 
@@ -94,7 +95,7 @@ function panelHtml(p) {
     body = `<div class="cut">If this road area is blocked, <b>${p.worst_cut}</b> could lose their way out to a major road.</div>
             <div class="src">Choke point shown on the map (white circle). Streets that would lose their way out are in bright red.</div>`;
   else
-    body = `<div class="cut">No single blocked road area cuts these buildings off from a major road.</div>`;
+    body = `<div class="cut">None of the sampled blockages cuts these buildings off from a major road.</div>`;
   return `<div class="big">${p.homes} mapped buildings in this neighbourhood</div>${body}
           <div class="src">Connects to major roads at ${p.gateways} point${p.gateways === 1 ? "" : "s"}.</div>
           <div class="src">${src}</div>`;
@@ -108,7 +109,8 @@ function select(nid) {
   if (!f) { panel.classList.add("hidden"); updateChokeFilter(); return; }
   map.setFeatureState({ source: "streets", id: nid }, { selected: true });
   panel.className = `card ${f.properties.status}`;
-  panel.innerHTML = panelHtml(f.properties);
+  panel.innerHTML = panelHtml(f.properties) + `<div id="bldInfo"></div>`;
+  showBuildings(nid, f.properties);
   map.setFilter("cut", ["==", ["get", "nid"], nid]);
   map.setFilter("blocked", ["==", ["get", "nid"], nid]);
   updateChokeFilter();
@@ -116,6 +118,53 @@ function select(nid) {
   const add = (c) => (typeof c[0] === "number" ? b.extend(c) : c.forEach(add));
   add(f.geometry.coordinates);
   map.fitBounds(b, { padding: { top: 60, bottom: 60, left: 380, right: 60 }, maxZoom: 16, duration: 900 });
+}
+
+// ---------- mapped building footprints ----------
+const SRC_LABEL = { osm: "OpenStreetMap", ms: "Microsoft" };
+let bldShown = { area: null, src: null }, bldCats = null, bldPinned = null;
+
+async function loadBuildings(area, src) {
+  if (bldShown.area === area && bldShown.src === src) return;
+  bldShown = { area, src };
+  const data = await (await fetch(`/api/${area}/buildings/${src}`)).json();
+  if (bldShown.area !== area || bldShown.src !== src) return;      // superseded
+  map.getSource("bld").setData(data);
+  applyBuildingCats();
+}
+
+function applyBuildingCats() {
+  map.removeFeatureState({ source: "bld" });
+  if (!bldCats || bldCats.area !== bldShown.area) return;
+  const s = bldCats.sources[bldShown.src];
+  for (const cat of ["retain", "cut", "inside"]) for (const id of s[cat]) map.setFeatureState({ source: "bld", id }, { cat });
+  renderBuildingInfo();
+}
+
+function renderBuildingInfo() {
+  const el = document.getElementById("bldInfo");
+  if (!el || !bldCats) return;
+  const s = bldCats.sources[bldShown.src], p = bldCats.props;
+  const btn = (src) => `<button data-src="${src}" class="${src === bldShown.src ? "on" : ""}">${SRC_LABEL[src]} (${src === "osm" ? p.homes_osm : p.homes_ms})</button>`;
+  el.innerHTML = `<div class="bldsrc">Footprints shown: ${btn("osm")}${btn("ms")}</div>
+    ${bldCats.choke ? `<div class="bldkey"><span class="k cut"></span>lose access (${s.cut.length})
+      <span class="k inside"></span>inside the blocked area (${s.inside.length})
+      <span class="k retain"></span>keep access (${s.retain.length})</div>` : ""}
+    ${bldCats.matches_scan === false ? `<div class="src">Note: building display does not match the scan counts.</div>` : ""}`;
+  el.querySelectorAll("button[data-src]").forEach((b) => (b.onclick = () => {
+    bldPinned = b.dataset.src; loadBuildings(bldShown.area, bldPinned).then(renderBuildingInfo);
+  }));
+}
+
+async function showBuildings(nid, props) {
+  const area = current;
+  const cats = await (await fetch(`/api/${area}/nb/${nid}/buildings`)).json();
+  if (area !== current || nid !== selected) return;
+  bldCats = { ...cats, area, props };
+  // default to the source that gives the headline count (the higher of the two), unless the viewer picked one
+  const src = bldPinned || (props.homes_ms > props.homes_osm ? "ms" : "osm");
+  if (bldShown.src !== src || bldShown.area !== area) await loadBuildings(area, src);
+  applyBuildingCats();
 }
 
 function updateChokeFilter() {
@@ -136,15 +185,13 @@ function renderRanking() {
 async function loadArea(name) {
   current = name;
   if (typeof clearMitigation === "function") clearMitigation();
-  if (typeof setFlood === "function") {
-    document.getElementById("floodBox").classList.toggle("hidden", name !== "fredericton");
-    if (name !== "fredericton") setFlood(false);
-  }
   document.querySelectorAll("#areas button").forEach((b) => b.classList.toggle("on", b.dataset.area === name));
   const [scan, roads, boundary] = await Promise.all(
     ["scan", "roads", "boundary"].map((k) => fetch(`/api/${name}/${k}`).then((r) => r.json())));
   if (current !== name) return;
   scanData = scan;
+  bldCats = null; bldPinned = null;
+  loadBuildings(name, "osm");   // subtle background footprints; loads after the roads, never blocks them
   map.getSource("roads").setData(roads);
   map.getSource("boundary").setData(boundary);
   map.getSource("nb").setData(scan.neighbourhoods);
@@ -169,9 +216,16 @@ document.querySelectorAll("#areas button").forEach((b) => (b.onclick = () => loa
 const fc = (features) => ({ type: "FeatureCollection", features });
 const pt = (ll) => ({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: ll } });
 
+// Every mitigation request carries a generation number. Clear, area switch and starting a new proposal bump it, so a
+// late response from an older request can never update the map or the panel.
+let mitGen = 0, mitKey = null, proposalCount = 0;
+function setProposal(features) { proposalCount = features.length; map.getSource("proposal").setData(fc(features)); }
+
 function clearMitigation() {
+  mitGen++; mitKey = null;
   drawing = false; clicks = [];
-  ["proposal", "mit-blocked", "mit-cut"].forEach((s) => map.getSource(s).setData(empty));
+  setProposal([]);
+  ["mit-blocked", "mit-cut"].forEach((s) => map.getSource(s).setData(empty));
   document.getElementById("mitig").classList.add("hidden");
   document.getElementById("hint").classList.add("hidden");
   document.getElementById("clearBtn").classList.add("hidden");
@@ -191,108 +245,59 @@ function startDrawing() {
 function mitigHtml(r) {
   if (!r.ok) return `<div class="cut">${r.message}</div>`;
   const b = r.before, a = r.after;
-  const after = a ? (a.worst_cut > 0
-      ? `With this road, the largest single choke point in the neighbourhood cuts off <b>${a.worst_cut}</b> (shown in blue).`
-      : `With this road, no single blocked road area cuts these buildings off.`) : "";
-  return `<div class="big">${r.regained} of ${b.worst_cut} mapped buildings regain a separate way out</div>
-    <div class="cut">Before: if this road area is blocked, ${b.worst_cut} of ${b.homes} mapped buildings could lose
-      their way out to a major road.</div>
-    <div class="cut">${after}</div>
-    <div class="src">Proposed road: ${r.length_m.toLocaleString()} m, straight line between the nearest existing road points.</div>`;
+  const road = `<div class="src">Proposed road: ${r.length_m.toLocaleString()} m between the nearest existing road
+    junctions or road ends. Conceptual straight-line connection; construction feasibility not assessed.</div>`;
+  const beforeTxt = `<div class="cut">Before: if this road area is blocked, ${b.worst_cut} of ${b.homes} mapped buildings
+    could lose their way out to a major road.</div>`;
+  if (r.unavailable) return `<div class="big">Result unavailable</div>${beforeTxt}<div class="cut">${r.message}</div>${road}`;
+  const after = a.worst_cut > 0
+    ? `For these same mapped buildings, the worst sampled blockage with the road cuts off <b>${a.worst_cut}</b> (shown in blue).`
+    : `For these same mapped buildings, none of the sampled blockages cuts them off with the road.`;
+  return `<div class="big">${r.regained} of ${b.worst_cut} mapped buildings regain access under this blockage</div>
+    ${beforeTxt}<div class="cut">${after}</div>${road}`;
 }
 
 async function runMitigation() {
+  const gen = ++mitGen, area = current, pair = clicks.slice(0, 2), key = JSON.stringify(pair);
+  mitKey = key;
+  const stillCurrent = () => gen === mitGen && area === current && key === mitKey;
   drawing = false;
   map.getCanvas().style.cursor = "";
   document.getElementById("drawBtn").classList.remove("on");
   document.getElementById("hint").classList.add("hidden");
+  document.getElementById("clearBtn").classList.remove("hidden");   // Clear available for drawn AND deep-linked proposals
   const box = document.getElementById("mitig");
   box.className = "card mitig"; box.innerHTML = "<div class='src'>Recalculating…</div>";
+  box.dataset.state = "pending";
   box.scrollIntoView({ block: "nearest" });
   let r;
   try {
-    const resp = await fetch(`/api/${current}/mitigate`, { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ a: clicks[0], b: clicks[1] }) });
+    const resp = await fetch(`/api/${area}/mitigate`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ a: pair[0], b: pair[1] }) });
     if (!resp.ok) throw new Error(`server replied ${resp.status}`);
     r = await resp.json();
   } catch (err) {
+    if (!stillCurrent()) return;
     console.error("mitigation request failed", err);
     r = { ok: false, message: `Couldn't reach the analysis server (${err.message}). Is scripts/serve.py running?` };
   }
+  if (!stillCurrent()) return;   // superseded by Clear, an area switch or a newer proposal: touch nothing
   box.innerHTML = mitigHtml(r);
   box.scrollIntoView({ block: "nearest" });
-  box.dataset.state = r.ok ? "done" : "error";   // used by the scripted demo check
-  if (!r.ok) { map.getSource("proposal").setData(fc(clicks.map(pt))); return; }
-  map.getSource("proposal").setData(fc([r.road, pt(r.road.geometry.coordinates[0]), pt(r.road.geometry.coordinates[1])]));
-  if (r.after_geo) {
+  box.dataset.state = r.ok ? "done" : "error";   // used by the scripted checks
+  if (!r.ok) { setProposal(pair.map(pt)); return; }
+  setProposal([r.road, pt(r.road.geometry.coordinates[0]), pt(r.road.geometry.coordinates[1])]);
+  if (r.after_geo && !r.unavailable) {
     map.getSource("mit-blocked").setData(r.after_geo.blocked);
     map.getSource("mit-cut").setData(r.after_geo.cut_roads);
   }
   if (selected !== r.before.nid) select(r.before.nid);
 }
 
-// ---------- river level scenario (Fredericton) ----------
-let floodInfo = null, floodReq = 0;
-const FLOOD_LAYERS = ["fl-cover", "fl-water", "fl-roads", "fl-cut"];
-const STREET_OPACITY = map.getPaintProperty("streets", "line-opacity");
-
-function floodHtml(s) {
-  const t = s.totals, lost = t.cut + t.inside;
-  return `<div class="big">${lost} mapped buildings lose their way out to a major road</div>
-    <div class="cut">River level ${s.gauge_m.toFixed(2)} m on the Fredericton gauge
-      (≈ ${s.water_cgvd2013_m.toFixed(2)} m elevation). ${s.flooded_road_km} km of mapped roads under water (cyan).</div>
-    <div class="src">${t.inside} are on streets under water; ${t.cut} more are cut off because every route out crosses
-      water (orange streets)${t.neighbourhoods ? `, in ${t.neighbourhoods} neighbourhood${t.neighbourhoods === 1 ? "" : "s"}` : ""}.</div>
-    <div class="src">Flat water level connected to the river; no flood defences or drainage modelled. Elevation data
-      covers the river corridor only (dashed outline) — roads outside it are treated as dry. Gauge heights are converted
-      to elevation with ${s.offset_m} m (NRCan). Flood stage 6.5 m; 2008 peak 8.36 m.</div>`;
-}
-
-async function runFlood(g) {
-  const req = ++floodReq;
-  const out = document.getElementById("floodOut");
-  out.innerHTML = `<div class="src">Calculating river level ${(+g).toFixed(2)} m…</div>`;
-  try {
-    const r = await fetch(`/api/fredericton/flood?gauge=${g}`);
-    if (!r.ok) throw new Error(`server replied ${r.status}`);
-    const s = await r.json();
-    if (req !== floodReq || current !== "fredericton") return;   // a newer request superseded this one
-    map.getSource("fl-water").setData(s.water);
-    map.getSource("fl-roads").setData(s.flooded_roads);
-    map.getSource("fl-cut").setData(s.cut_roads);
-    out.innerHTML = floodHtml(s);
-    out.dataset.state = "done";
-  } catch (err) {
-    out.innerHTML = `<div class="cut">Couldn't calculate this river level (${err.message}).</div>`;
-    out.dataset.state = "error";
-  }
-}
-
-async function setFlood(on) {
-  document.getElementById("floodOn").checked = on;
-  document.getElementById("floodCtl").classList.toggle("hidden", !on);
-  FLOOD_LAYERS.forEach((l) => map.setLayoutProperty(l, "visibility", on ? "visible" : "none"));
-  map.setPaintProperty("streets", "line-opacity", on ? 0.25 : STREET_OPACITY);   // dim the scan while the scenario shows
-  if (!on) return;
-  if (!floodInfo) {
-    floodInfo = await (await fetch("/api/fredericton/flood/info")).json();
-    map.getSource("fl-cover").setData(floodInfo.coverage);
-  }
-  runFlood(document.getElementById("gauge").value);
-}
-
-document.getElementById("floodOn").onchange = (e) => setFlood(e.target.checked);
-document.getElementById("gauge").onchange = (e) => runFlood(e.target.value);
-document.getElementById("gauge").oninput = (e) =>
-  (document.getElementById("floodOut").innerHTML = `<div class="src">River level ${(+e.target.value).toFixed(2)} m — release to calculate</div>`);
-document.querySelectorAll(".presets button").forEach((b) => (b.onclick = () => {
-  document.getElementById("gauge").value = b.dataset.g; runFlood(b.dataset.g);
-}));
-
 map.on("click", (e) => {
   if (!drawing) return;
   clicks.push([e.lngLat.lng, e.lngLat.lat]);
-  map.getSource("proposal").setData(fc(clicks.map(pt)));
+  setProposal(clicks.map(pt));
   if (clicks.length === 2) runMitigation();
 });
 document.getElementById("drawBtn").onclick = startDrawing;
@@ -307,11 +312,19 @@ map.on("mouseleave", "nb-fill", () => (map.getCanvas().style.cursor = ""));
 const q = new URLSearchParams(location.search);
 await loadArea(areas[q.get("area")] ? q.get("area") : "tantallon");
 if (q.get("nid")) select(+q.get("nid"));
-// &gauge=8.36 opens the Fredericton river level scenario at that level
-if (q.get("gauge") && current === "fredericton") { document.getElementById("gauge").value = q.get("gauge"); setFlood(true); }
 // scripted demo / backup: &road=lonA,latA,lonB,latB runs the same mitigation path as two map clicks
 if (q.get("road")) {
   const v = q.get("road").split(",").map(Number);
   if (v.length === 4 && v.every(Number.isFinite)) { clicks = [[v[0], v[1]], [v[2], v[3]]]; runMitigation(); }
 }
-window.__app = { map, select, loadArea };   // for debugging / scripted demo
+window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
+  map, select, loadArea, clear: clearMitigation,
+  propose(a, b) { clearMitigation(); clicks = [a, b]; return runMitigation(); },
+  state() {
+    const box = document.getElementById("mitig");
+    return { area: current, cardHidden: box.classList.contains("hidden"), cardState: box.dataset.state || null,
+             cardText: box.textContent.replace(/\s+/g, " ").trim(), proposalFeatures: proposalCount,
+             clearVisible: !document.getElementById("clearBtn").classList.contains("hidden") };
+  },
+};
+if (q.get("selftest")) import("/selftest.js");
