@@ -101,6 +101,16 @@ def test_winding_road_keeps_separate_blocked_intervals():
     assert r["cut_osm"] == 1 and r["cut_ids"]["osm"] == {0}, r           # old code: M counted "inside", cut = 0
 
 
+def test_retraced_road_gets_each_traversal_position():
+    """Codex adversarial case: a road that goes out and retraces the same physical stretch. line.project() returns
+    only the first pass, so the second traversal's blocked stretch was mislocated."""
+    # G1 (4000,5000) -> up to (4000,5600) -> back down the SAME line to (4000,5300) -> east to (4400,5300)
+    line = LineString([(4000, 5000), (4000, 5600), (4000, 5300), (4400, 5300)])
+    circle = Point(4000, 5450).buffer(engine.BLOCK_RADIUS_M)
+    ivs = [(round(a), round(b)) for a, b in engine._blocked_intervals(line, circle)]
+    assert ivs == [(400, 500), (700, 800)], ivs                          # old code: [(400, 500)] only
+
+
 # ------------------------------------------------------------------ Codex failure 4: roads between two junctions
 def test_local_roads_between_junctions_and_loops_are_kept():
     node_xy, roads = arterial([-500, 4000, 4200, 6000, 10500])           # 101, 102 junctions; 103 = G3

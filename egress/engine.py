@@ -232,14 +232,25 @@ def neighbourhoods(area: Area) -> list[Neighbourhood]:
 
 
 def _blocked_intervals(line: LineString, geom) -> list[tuple[float, float]]:
-    """Separate stretches of `line` covered by `geom`, as sorted, merged (start, end) positions along the line."""
-    inter = line.intersection(geom)
-    if inter.is_empty:
+    """Separate stretches of `line` covered by `geom`, as sorted, merged (start, end) positions along the line.
+
+    Computed segment by segment while accumulating the distance travelled, so a road that retraces the same physical
+    stretch gets each traversal's own position (line.project would return only the first pass)."""
+    coords = list(line.coords)
+    ivs, run = [], 0.0
+    for p, q in zip(coords, coords[1:]):
+        seg = LineString([p, q])
+        L = seg.length
+        if L > 0 and seg.intersects(geom):
+            inter = seg.intersection(geom)
+            for g in getattr(inter, "geoms", [inter]):
+                if g.is_empty:
+                    continue
+                ts = [Point(p).distance(Point(c)) for c in g.coords]   # distance along this straight segment
+                ivs.append((run + min(ts), run + max(ts)))
+        run += L
+    if not ivs:
         return []
-    ivs = []
-    for g in getattr(inter, "geoms", [inter]):
-        ts = [line.project(Point(c)) for c in g.coords]
-        ivs.append((min(ts), max(ts)))
     ivs.sort()
     merged = [list(ivs[0])]
     for a, b in ivs[1:]:
@@ -449,10 +460,14 @@ def mitigate_nodes(area: Area, a: int, b: int, choke: Point | None = None) -> di
     pts = sample_points(new_area)
     new_worst, new_pt = _worst(new_area, nb1, pts, shapely.STRtree(pts), cohort)
     after = dict(worst_cut=new_worst["cut"], gateways=len(nb1.gateways),
+                 worst_cut_src={"osm": new_worst["cut_osm"], "ms": new_worst["cut_ms"]},
                  status="red" if new_worst["cut"] >= RED_MIN_CUT else "amber" if new_worst["cut"] > 0 else "green")
-    after_geo = results_geojson([dict(nid=nb1.nid, status=after["status"], homes=worst["homes"], homes_osm=0, homes_ms=0,
-                                      gateways=after["gateways"], worst_cut=new_worst["cut"], worst_cut_osm=0,
-                                      worst_cut_ms=0, worst_inside=0, rank=None, choke=new_pt,
+    # values describe the ORIGINAL cohort evaluated on the augmented network (no placeholder zeros)
+    after_geo = results_geojson([dict(nid=nb1.nid, status=after["status"], homes=worst["homes"],
+                                      homes_osm=len(cohort["osm"]), homes_ms=len(cohort["ms"]),
+                                      gateways=after["gateways"], worst_cut=new_worst["cut"],
+                                      worst_cut_osm=new_worst["cut_osm"], worst_cut_ms=new_worst["cut_ms"],
+                                      worst_inside=new_worst["inside"], rank=None, choke=new_pt,
                                       geometry=shapely.union_all([new_area.edges[i].line.buffer(40) for i in nb1.edge_idx]),
                                       streets=shapely.MultiLineString([new_area.edges[i].line for i in nb1.edge_idx]),
                                       cut_lines=shapely.union_all([new_area.edges[i].line for i in new_worst["cut_edges"]])

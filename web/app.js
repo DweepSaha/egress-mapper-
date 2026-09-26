@@ -95,7 +95,7 @@ function panelHtml(p) {
     body = `<div class="cut">If this road area is blocked, <b>${p.worst_cut}</b> could lose their way out to a major road.</div>
             <div class="src">Choke point shown on the map (white circle). Streets that would lose their way out are in bright red.</div>`;
   else
-    body = `<div class="cut">No single blocked road area cuts these buildings off from a major road.</div>`;
+    body = `<div class="cut">None of the sampled blockages cuts these buildings off from a major road.</div>`;
   return `<div class="big">${p.homes} mapped buildings in this neighbourhood</div>${body}
           <div class="src">Connects to major roads at ${p.gateways} point${p.gateways === 1 ? "" : "s"}.</div>
           <div class="src">${src}</div>`;
@@ -216,9 +216,16 @@ document.querySelectorAll("#areas button").forEach((b) => (b.onclick = () => loa
 const fc = (features) => ({ type: "FeatureCollection", features });
 const pt = (ll) => ({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: ll } });
 
+// Every mitigation request carries a generation number. Clear, area switch and starting a new proposal bump it, so a
+// late response from an older request can never update the map or the panel.
+let mitGen = 0, mitKey = null, proposalCount = 0;
+function setProposal(features) { proposalCount = features.length; map.getSource("proposal").setData(fc(features)); }
+
 function clearMitigation() {
+  mitGen++; mitKey = null;
   drawing = false; clicks = [];
-  ["proposal", "mit-blocked", "mit-cut"].forEach((s) => map.getSource(s).setData(empty));
+  setProposal([]);
+  ["mit-blocked", "mit-cut"].forEach((s) => map.getSource(s).setData(empty));
   document.getElementById("mitig").classList.add("hidden");
   document.getElementById("hint").classList.add("hidden");
   document.getElementById("clearBtn").classList.add("hidden");
@@ -238,41 +245,48 @@ function startDrawing() {
 function mitigHtml(r) {
   if (!r.ok) return `<div class="cut">${r.message}</div>`;
   const b = r.before, a = r.after;
-  const road = `<div class="src">Proposed road: ${r.length_m.toLocaleString()} m, straight line between the nearest
-    existing road junctions or road ends.</div>`;
+  const road = `<div class="src">Proposed road: ${r.length_m.toLocaleString()} m between the nearest existing road
+    junctions or road ends. Conceptual straight-line connection; construction feasibility not assessed.</div>`;
   const beforeTxt = `<div class="cut">Before: if this road area is blocked, ${b.worst_cut} of ${b.homes} mapped buildings
     could lose their way out to a major road.</div>`;
   if (r.unavailable) return `<div class="big">Result unavailable</div>${beforeTxt}<div class="cut">${r.message}</div>${road}`;
   const after = a.worst_cut > 0
-    ? `For these same mapped buildings, the largest single choke point with the road cuts off <b>${a.worst_cut}</b> (shown in blue).`
-    : `For these same mapped buildings, no single blocked road area cuts them off with the road.`;
+    ? `For these same mapped buildings, the worst sampled blockage with the road cuts off <b>${a.worst_cut}</b> (shown in blue).`
+    : `For these same mapped buildings, none of the sampled blockages cuts them off with the road.`;
   return `<div class="big">${r.regained} of ${b.worst_cut} mapped buildings regain access under this blockage</div>
     ${beforeTxt}<div class="cut">${after}</div>${road}`;
 }
 
 async function runMitigation() {
+  const gen = ++mitGen, area = current, pair = clicks.slice(0, 2), key = JSON.stringify(pair);
+  mitKey = key;
+  const stillCurrent = () => gen === mitGen && area === current && key === mitKey;
   drawing = false;
   map.getCanvas().style.cursor = "";
   document.getElementById("drawBtn").classList.remove("on");
   document.getElementById("hint").classList.add("hidden");
+  document.getElementById("clearBtn").classList.remove("hidden");   // Clear available for drawn AND deep-linked proposals
   const box = document.getElementById("mitig");
   box.className = "card mitig"; box.innerHTML = "<div class='src'>Recalculating…</div>";
+  box.dataset.state = "pending";
   box.scrollIntoView({ block: "nearest" });
   let r;
   try {
-    const resp = await fetch(`/api/${current}/mitigate`, { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ a: clicks[0], b: clicks[1] }) });
+    const resp = await fetch(`/api/${area}/mitigate`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ a: pair[0], b: pair[1] }) });
     if (!resp.ok) throw new Error(`server replied ${resp.status}`);
     r = await resp.json();
   } catch (err) {
+    if (!stillCurrent()) return;
     console.error("mitigation request failed", err);
     r = { ok: false, message: `Couldn't reach the analysis server (${err.message}). Is scripts/serve.py running?` };
   }
+  if (!stillCurrent()) return;   // superseded by Clear, an area switch or a newer proposal: touch nothing
   box.innerHTML = mitigHtml(r);
   box.scrollIntoView({ block: "nearest" });
-  box.dataset.state = r.ok ? "done" : "error";   // used by the scripted demo check
-  if (!r.ok) { map.getSource("proposal").setData(fc(clicks.map(pt))); return; }
-  map.getSource("proposal").setData(fc([r.road, pt(r.road.geometry.coordinates[0]), pt(r.road.geometry.coordinates[1])]));
+  box.dataset.state = r.ok ? "done" : "error";   // used by the scripted checks
+  if (!r.ok) { setProposal(pair.map(pt)); return; }
+  setProposal([r.road, pt(r.road.geometry.coordinates[0]), pt(r.road.geometry.coordinates[1])]);
   if (r.after_geo && !r.unavailable) {
     map.getSource("mit-blocked").setData(r.after_geo.blocked);
     map.getSource("mit-cut").setData(r.after_geo.cut_roads);
@@ -283,7 +297,7 @@ async function runMitigation() {
 map.on("click", (e) => {
   if (!drawing) return;
   clicks.push([e.lngLat.lng, e.lngLat.lat]);
-  map.getSource("proposal").setData(fc(clicks.map(pt)));
+  setProposal(clicks.map(pt));
   if (clicks.length === 2) runMitigation();
 });
 document.getElementById("drawBtn").onclick = startDrawing;
@@ -303,4 +317,14 @@ if (q.get("road")) {
   const v = q.get("road").split(",").map(Number);
   if (v.length === 4 && v.every(Number.isFinite)) { clicks = [[v[0], v[1]], [v[2], v[3]]]; runMitigation(); }
 }
-window.__app = { map, select, loadArea };   // for debugging / scripted demo
+window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
+  map, select, loadArea, clear: clearMitigation,
+  propose(a, b) { clearMitigation(); clicks = [a, b]; return runMitigation(); },
+  state() {
+    const box = document.getElementById("mitig");
+    return { area: current, cardHidden: box.classList.contains("hidden"), cardState: box.dataset.state || null,
+             cardText: box.textContent.replace(/\s+/g, " ").trim(), proposalFeatures: proposalCount,
+             clearVisible: !document.getElementById("clearBtn").classList.contains("hidden") };
+  },
+};
+if (q.get("selftest")) import("/selftest.js");
