@@ -59,10 +59,13 @@ map.addLayer({ id: "bld-line", type: "line", source: "bld", minzoom: 14,
            "line-opacity": ["match", BLD_CAT, "cut", 1, "inside", 1, 0] } }, "roads");
 // 3D view (presentation only): the same polygons and category colours, extruded to one fixed illustrative height.
 // Placed below the road layers so roads, choke points, the proposed connection and hazard lines stay readable on top.
-const BLD_HEIGHT_M = 7;          // illustrative, identical for every mapped building (real heights are not available)
+const BLD_HEIGHT_M = 14;         // illustrative, identical for every mapped building (real heights are not available)
+const BLD_COLOR_3D = ["match", BLD_CAT, "cut", "#ff7a45", "inside", "#c084fc", "retain", "#4fb3a0", "#5a6573"];
 map.addLayer({ id: "bld-3d", type: "fill-extrusion", source: "bld", minzoom: 12, layout: { visibility: "none" },
-  paint: { "fill-extrusion-color": BLD_COLOR, "fill-extrusion-height": BLD_HEIGHT_M, "fill-extrusion-base": 0,
-           "fill-extrusion-opacity": 0.88 } }, "roads");
+  paint: { "fill-extrusion-color": BLD_COLOR_3D, "fill-extrusion-height": BLD_HEIGHT_M, "fill-extrusion-base": 0,
+           "fill-extrusion-opacity": 0.92, "fill-extrusion-vertical-gradient": true } }, "roads");
+// a lower, stronger light than the default so walls and roofs shade differently (depth cue); affects extrusions only
+map.setLight({ anchor: "viewport", color: "#ffffff", intensity: 0.6, position: [1.2, 200, 35] });
 
 const SEL = ["boolean", ["feature-state", "selected"], false];
 map.addLayer({ id: "streets", type: "line", source: "streets", layout: { "line-cap": "round", "line-join": "round" },
@@ -216,7 +219,8 @@ function select(nid) {
   const b = new maplibregl.LngLatBounds();
   const add = (c) => (typeof c[0] === "number" ? b.extend(c) : c.forEach(add));
   add(f.geometry.coordinates);
-  map.fitBounds(b, { padding: 60, maxZoom: 16, duration: 900, bearing: map.getBearing() });   // keeps 2D/3D tilt
+  if (view === "3d") frame3d(nid, 900);
+  else map.fitBounds(b, { padding: 60, maxZoom: 16, duration: 900, bearing: map.getBearing() });
   syncMode();
 }
 
@@ -793,19 +797,48 @@ document.querySelectorAll("#modes button").forEach((b) => (b.onclick = () => {
   else if (m === "fire") { if (floodOn) exitFlood(false); if (!fireOn) enterFire(); }
 }));
 $("resetView").onclick = () => current && map.flyTo({ center: areas[current].center, zoom: areas[current].zoom,
-                                                        pitch: view === "3d" ? PITCH_3D : 0, bearing: 0, duration: 800 });
+                                                        pitch: view === "3d" ? PITCH_3D : 0, bearing: view === "3d" ? BEARING_3D : 0, duration: 800 });
 
 // ---------- 2D / 3D: two views of the SAME current result. Only the camera and the building layer change: no request,
 // no recalculation, and no change to scenario, selection, source, proposed connection or parameters.
-const PITCH_3D = 55;
+const PITCH_3D = 57, BEARING_3D = 30;
 let view = "2d";
+// 3D framing of one neighbourhood: closer than the flat fit, tilted and rotated so walls face the viewer
+function frame3d(nid, duration = 1200) {
+  const f = scanData && scanData.neighbourhoods.features.find((x) => x.id === nid);
+  if (!f) return false;
+  const b = new maplibregl.LngLatBounds();
+  const add = (c) => (typeof c[0] === "number" ? b.extend(c) : c.forEach(add));
+  add(f.geometry.coordinates);
+  const cam = map.cameraForBounds(b, { padding: 40, bearing: BEARING_3D, maxZoom: 16.5 });
+  if (!cam) return false;
+  const opts = { center: cam.center, zoom: Math.min(cam.zoom + 1.2, 16.8), bearing: BEARING_3D, pitch: PITCH_3D };
+  if (duration) map.easeTo({ ...opts, duration }); else map.jumpTo(opts);
+  return true;
+}
+// back to 2D: the same flat, north-up framing that selecting a neighbourhood gives in 2D
+function frame2d(nid, duration = 900) {
+  const f = scanData && scanData.neighbourhoods.features.find((x) => x.id === nid);
+  if (!f) return false;
+  const b = new maplibregl.LngLatBounds();
+  const add = (c) => (typeof c[0] === "number" ? b.extend(c) : c.forEach(add));
+  add(f.geometry.coordinates);
+  const cam = map.cameraForBounds(b, { padding: 60, bearing: 0, maxZoom: 16 });
+  if (!cam) return false;
+  const opts = { center: cam.center, zoom: cam.zoom, bearing: 0, pitch: 0 };
+  if (duration) map.easeTo({ ...opts, duration }); else map.jumpTo(opts);
+  return true;
+}
 function setView(v, animate = true) {
   view = v === "3d" ? "3d" : "2d";
   const is3d = view === "3d";
   map.setLayoutProperty("bld-3d", "visibility", is3d ? "visible" : "none");
   ["bld-fill", "bld-line"].forEach((l) => map.setLayoutProperty(l, "visibility", is3d ? "none" : "visible"));
-  const cam = { pitch: is3d ? PITCH_3D : 0, ...(is3d ? {} : { bearing: 0 }) };
-  if (animate) map.easeTo({ ...cam, duration: 900 }); else map.jumpTo(cam);
+  const framed = selected !== null && (is3d ? frame3d(selected, animate ? 1200 : 0) : frame2d(selected, animate ? 900 : 0));
+  if (!framed) {
+    const cam = { pitch: is3d ? PITCH_3D : 0, bearing: is3d ? BEARING_3D : 0 };
+    if (animate) map.easeTo({ ...cam, duration: 900 }); else map.jumpTo(cam);
+  }
   document.querySelectorAll("#viewCtl button").forEach((b) => b.classList.toggle("on", b.dataset.view === view));
   $("viewNote").classList.toggle("hidden", !is3d);
 }

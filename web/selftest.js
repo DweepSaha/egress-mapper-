@@ -222,7 +222,7 @@ async function viewSuite() {
     const v2 = app.viewState(), after = state();
     const same = JSON.stringify(before) === JSON.stringify(mid) && JSON.stringify(before) === JSON.stringify(after);
     record(`V ${name}: 2D -> 3D -> 2D keeps state, no requests`,
-      same && apiCalls === calls0 && Math.abs(v3.pitch - 55) < 0.5 && v3.vis3d === "visible" && v3.vis2d === "none" &&
+      same && apiCalls === calls0 && Math.abs(v3.pitch - 57) < 0.5 && v3.vis3d === "visible" && v3.vis2d === "none" &&
       !v3.noteHidden && v2.pitch === 0 && v2.vis3d === "none" && v2.vis2d === "visible" && v2.noteHidden,
       { requests: apiCalls - calls0, v3, v2, diff: same ? null : { before, mid, after } });
   }
