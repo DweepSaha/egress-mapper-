@@ -41,10 +41,54 @@ const record = (name, pass, detail) => out.push({ name, pass, detail });
 async function floodSuite() {
   const waitDone = async () => { for (let i = 0; i < 150 && app.floodState().cardState !== "done"; i++) await sleep(200); };
   await app.loadArea("fredericton");
-  const waitBld = async (src) => { for (let i = 0; i < 100; i++) { const f = app.floodState(); if (f.bldSrc === src && f.bldReady) return; await sleep(200); } };
+  const waitBld = async (src) => { for (let i = 0; i < 450; i++) { const f = app.floodState(); if (f.bldSrc === src && f.bldReady) return; await sleep(200); } };
   await waitBld("osm");
+  // F-init (Codex): flood(8.36) with a slow info response -> disable -> flood(6.50) completes -> old init released.
+  // The old continuation must not restore 8.36 or change anything.
+  app.resetFloodInfo(); infoDelays.push(2500);
+  const pOld = app.flood(8.36); await sleep(100); app.unflood();
+  const pNew = app.flood(6.5); await pNew; await waitDone();
+  const beforeRelease = app.floodState();
+  await pOld; await sleep(800);
+  const afterRelease = app.floodState();
+  record("F-init overlapping initialization: old continuation is inert", afterRelease.on && Number(app.gaugeValue()) === 6.5 &&
+         afterRelease.cardText.includes("6.50 m (gauge)") && !afterRelease.cardText.includes("8.36 m (gauge)") &&
+         afterRelease.coverFeatures > 0 && afterRelease.cardText === beforeRelease.cardText,
+         { slider: app.gaugeValue(), card: afterRelease.cardText.slice(0, 60), cover: afterRelease.coverFeatures });
+  app.unflood(); await waitBld("osm");
+
+  // F-worker (Codex): delayed and reordered MapLibre source completion. Microsoft ids must never colour OSM polygons.
+  await app.flood(8.36); await waitDone(); await waitBld("osm");
+  const w0 = app.bldCheck();
+  app.bldTest.completeDelays.push(2500);                            // (a) Microsoft completion is slow
+  document.querySelector('#floodBld button[data-src="ms"]').click(); await sleep(900);
+  app.reapply();                                                     // try to apply categories mid-replacement
+  const wMid = app.bldCheck();
+  await waitBld("ms"); await sleep(300);
+  const wMs = app.bldCheck();
+  app.bldTest.completeDelays.push(2500, 0);                         // (b) reorder: slow OSM, then fast Microsoft...
+  document.querySelector('#floodBld button[data-src="osm"]').click(); await sleep(150);
+  document.querySelector('#floodBld button[data-src="ms"]').click();
+  const pend = [];                                                   // sample while processing is pending
+  for (let i = 0; i < 6; i++) { await sleep(500); app.reapply(); pend.push(app.bldCheck()); }
+  await waitBld("ms"); await sleep(3000);                            // ...then the stale OSM completion arrives last
+  const wEnd = app.bldCheck();
+  const pendOk = pend.every((c) => c.wrongStates === 0 && (c.ready ? c.appliedNs === c.ns : c.states === 0));
+  record("F-worker delayed/reordered source completion never cross-colours", w0.ready && w0.wrongStates === 0 &&
+         !wMid.ready && wMid.states === 0 && wMid.wrongStates === 0 &&
+         wMs.ready && wMs.src === "ms" && wMs.wrongStates === 0 && wMs.appliedNs === wMs.ns && pendOk &&
+         Object.keys(wMs.loadedByNs).every((k) => +k === wMs.ns) &&        // ready only once MS polygons are loaded
+         pend.every((c) => !c.ready || Object.keys(c.loadedByNs).every((k) => +k === c.ns)) &&
+         wEnd.src === "ms" && wEnd.ready && wEnd.wrongStates === 0 && wEnd.appliedNs === wEnd.ns,
+         { w0: [w0.src, w0.ready, w0.states, w0.loaded, w0.wrongStates], mid: [wMid.src, wMid.ready, wMid.states, wMid.wrongStates],
+           ms: [wMs.src, wMs.ready, wMs.states, wMs.loaded, wMs.wrongStates, wMs.loadedByNs],
+           pending: pend.map((c) => [c.src, c.ready, c.states, c.wrongStates, Object.keys(c.loadedByNs).join("+")]),
+           end: [wEnd.src, wEnd.ready, wEnd.states, wEnd.wrongStates, wEnd.loadedByNs] });
+  document.querySelector('#floodBld button[data-src="osm"]').click(); await waitBld("osm");
+  app.unflood(); await waitBld("osm");
+
   // F3. interrupted FIRST activation: info response arrives after the scenario was turned off; re-enable -> outline
-  infoDelays.push(1500);
+  app.resetFloodInfo(); infoDelays.push(1500);
   const p3 = app.flood(); await sleep(100); app.unflood(); await p3; await sleep(300);
   const coverAfterInterrupt = app.floodState().coverFeatures;
   await app.flood(8.36); await waitDone();
@@ -64,14 +108,14 @@ async function floodSuite() {
   const base0 = app.snapshot();
   await app.flood(8.36); await waitDone();
   const during = app.floodState(), duringSnap = app.snapshot();
-  app.unflood(); await sleep(500);
+  app.unflood(); await waitBld("osm"); await sleep(500);
   record("F5a flood reset restores exact baseline (no selection)", during.cardState === "done" && during.bldStates > 0 &&
          duringSnap !== base0 && app.snapshot() === base0, { during: during.cardText.slice(0, 160) });
   // F5b. same, with a neighbourhood selected before entering the scenario
   app.select(18); await sleep(1500);
   const base1 = app.snapshot();
   await app.flood(6.5); await waitDone();
-  app.unflood(); await sleep(1500);
+  app.unflood(); await waitBld(JSON.parse(base1).bldSrc); await sleep(1500);
   record("F5b flood reset restores exact baseline (neighbourhood selected)", app.snapshot() === base1,
          { equal: app.snapshot() === base1 });
   // stale flood response: 9.00 answers late, after a newer 6.50 request
