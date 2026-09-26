@@ -57,7 +57,8 @@ class Edge:
     u: int
     v: int
     line: LineString          # oriented from u to v
-    exit: bool
+    exit: bool                # qualifying class AND part of the through-road system (see _mark_spurs)
+    qualifying: bool = False  # collector/arterial class, before the spur rule
     homes_t: dict = field(default_factory=lambda: {"osm": np.empty(0), "ms": np.empty(0)})  # positions along line
 
 
@@ -80,26 +81,58 @@ def load_area(name: str) -> Area:
     U = ox.convert.to_undirected(G)
     node_xy = {n: (d["x"], d["y"]) for n, d in U.nodes(data=True)}
 
-    edges, exit_nodes = [], set()
+    edges = []
     for u, v, d in U.edges(data=True):
         line = d.get("geometry") or LineString([node_xy[u], node_xy[v]])
         if Point(line.coords[0]).distance(Point(node_xy[u])) > Point(line.coords[0]).distance(Point(node_xy[v])):
             line = LineString(line.coords[::-1])  # orient u -> v
-        is_exit = bool(_classes(d.get("highway")) & EXIT_CLASSES)
-        edges.append(Edge(u, v, line, is_exit))
-        if is_exit:
-            exit_nodes.update((u, v))
+        q = bool(_classes(d.get("highway")) & EXIT_CLASSES)
+        edges.append(Edge(u, v, line, exit=q, qualifying=q))
+
+    to_m = Transformer.from_crs("EPSG:4326", config.ANALYSIS_CRS, always_xy=True).transform
+    study = transform(to_m, box(*STUDY_BBOX[name]))
+    spur_stats = _mark_spurs(edges, node_xy, study)
+    exit_nodes = {n for e in edges if e.exit for n in (e.u, e.v)}
 
     edge_tree = shapely.STRtree([e.line for e in edges])
     node_ids = np.array(list(node_xy))
     node_tree = shapely.STRtree([Point(node_xy[n]) for n in node_ids])
+    assessable = study.buffer(-BOUNDARY_BUFFER_M)
 
-    to_m = Transformer.from_crs("EPSG:4326", config.ANALYSIS_CRS, always_xy=True).transform
-    assessable = transform(to_m, box(*STUDY_BBOX[name])).buffer(-BOUNDARY_BUFFER_M)
-
-    area = Area(name, edges, node_xy, exit_nodes, edge_tree, node_ids, node_tree, assessable, {})
+    area = Area(name, edges, node_xy, exit_nodes, edge_tree, node_ids, node_tree, assessable, {"spurs": spur_stats})
     _attach_homes(area)
     return area
+
+
+WORLD = "__outside_world__"
+
+
+def _mark_spurs(edges: list[Edge], node_xy: dict, study) -> dict:
+    """Spur rule: a qualifying road is a way out only if it gives onward access through the broader road system.
+
+    The broader system is anchored where qualifying roads leave the study box (their points outside it all join a
+    virtual WORLD node). Split the qualifying-road network into biconnected sections; a qualifying road counts as a
+    way out only if its section contains WORLD. A branch attached to that system through a single point is a spur
+    and is reclassified as local road.
+    """
+    X = nx.Graph()
+    for e in edges:
+        if e.qualifying and e.u != e.v:
+            X.add_edge(e.u, e.v)
+    for n in list(X.nodes):
+        if not study.contains(Point(node_xy[n])):
+            X.add_edge(n, WORLD)
+    through = set()
+    if WORLD in X:
+        for block in nx.biconnected_component_edges(X):
+            if any(WORLD in pair for pair in block):
+                through.update(frozenset(p) for p in block)
+    n_spur = 0
+    for e in edges:
+        if e.qualifying and frozenset((e.u, e.v)) not in through:
+            e.exit = False
+            n_spur += 1
+    return dict(qualifying=sum(e.qualifying for e in edges), spur_reclassified=n_spur)
 
 
 def _attach_homes(area: Area) -> None:
@@ -242,8 +275,9 @@ def scan(area: Area) -> list[dict]:
         if nb.n_homes < MIN_HOMES or not nb.gateways:
             continue
         lines = [area.edges[i].line for i in nb.edge_idx]
-        footprint = shapely.union_all([l.buffer(40) for l in lines])
-        assessed = area.assessable.contains(footprint)
+        footprint = shapely.union_all([l.buffer(40) for l in lines])   # display shape only
+        # boundary rule applies to the roads themselves, not the 40 m display buffer
+        assessed = area.assessable.contains(shapely.union_all(lines))
         worst = dict(cut=0, cut_osm=0, cut_ms=0, inside=0)
         worst_pt = None
         if assessed:

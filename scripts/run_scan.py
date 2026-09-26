@@ -13,7 +13,10 @@ area = engine.load_area(area_name)
 t1 = time.time()
 print(f"[{area_name}] loaded {len(area.edges):,} road segments ({sum(e.exit for e in area.edges):,} exit), "
       f"{len(area.exit_nodes):,} exit nodes in {t1 - t0:.1f}s")
-for src, s in area.stats.items():
+print(f"  spur rule: {area.stats['spurs']['spur_reclassified']:,} of {area.stats['spurs']['qualifying']:,} "
+      f"collector/arterial segments are spurs (treated as local)")
+for src in ("osm", "ms"):
+    s = area.stats[src]
     print(f"  {src}: {s['footprints']:,} footprints, {s['homes']:,} >= {engine.MIN_HOME_M2:.0f} m2, "
           f"{s['attached']:,} attached to a road ({s['on_exit_roads']:,} on exit roads)")
 
