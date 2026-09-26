@@ -270,13 +270,16 @@ def sample_points(area: Area) -> list[Point]:
     return pts
 
 
-def scan(area: Area) -> list[dict]:
-    """Vulnerability scan: worst single blockage per neighbourhood of MIN_HOMES+ homes."""
+def scan(area: Area, only_nodes: set[int] | None = None, min_homes: int = MIN_HOMES) -> list[dict]:
+    """Vulnerability scan: worst single blockage per neighbourhood of MIN_HOMES+ homes.
+    only_nodes: restrict to neighbourhoods containing any of these road nodes (used by the mitigation test)."""
     pts = sample_points(area)
     pt_tree = shapely.STRtree(pts)
     results = []
     for nb in neighbourhoods(area):
-        if nb.n_homes < MIN_HOMES or not nb.gateways:
+        if only_nodes is not None and not (only_nodes & (nb.local_nodes | nb.gateways)):
+            continue
+        if nb.n_homes < min_homes or not nb.gateways:
             continue
         lines = [area.edges[i].line for i in nb.edge_idx]
         footprint = shapely.union_all([l.buffer(40) for l in lines])   # display shape only
@@ -306,6 +309,67 @@ def scan(area: Area) -> list[dict]:
     for r in results:
         r.setdefault("rank", None)
     return results
+
+
+SNAP_MAX_M = 400.0
+_TO_M = Transformer.from_crs("EPSG:4326", config.ANALYSIS_CRS, always_xy=True).transform
+
+
+def _snap(area: Area, lonlat) -> int | None:
+    p = Point(_TO_M(*lonlat))
+    i, d = area.node_tree.query_nearest(p, return_distance=True)
+    return int(area.node_ids[i[0]]) if len(i) and d[0] <= SNAP_MAX_M else None
+
+
+def with_new_road(area: Area, a: int, b: int) -> tuple[Area, LineString]:
+    """A temporary copy of the area with one proposed local road from node a to node b (cache untouched)."""
+    line = LineString([area.node_xy[a], area.node_xy[b]])
+    new = Edge(a, b, line, exit=False, qualifying=False)
+    edges = area.edges + [new]
+    copy = Area(area.name, edges, area.node_xy, area.exit_nodes, shapely.STRtree([e.line for e in edges]),
+                area.node_ids, area.node_tree, area.assessable, area.stats)
+    return copy, line
+
+
+def _choke_cut(area: Area, nodes: set[int], centre: Point) -> dict:
+    """Buildings cut off by a blockage at `centre`, within the neighbourhood that contains `nodes`."""
+    for nb in neighbourhoods(area):
+        if nodes & nb.local_nodes:
+            return evaluate_block(area, nb, centre) if nb.gateways else dict(cut=nb.n_homes, cut_edges=set(nb.edge_idx))
+    return dict(cut=0, cut_edges=set())
+
+
+def mitigate(area: Area, a_ll, b_ll) -> dict:
+    """Mitigation test: add a proposed road between the road points nearest two clicks and re-scan what it touches."""
+    a, b = _snap(area, a_ll), _snap(area, b_ll)
+    if a is None or b is None:
+        return dict(ok=False, message=f"Each end must be within {SNAP_MAX_M:.0f} m of an existing road.")
+    if a == b:
+        return dict(ok=False, message="Both ends snapped to the same road point; draw a longer road.")
+    touched = {a, b}
+    before = scan(area, only_nodes=touched, min_homes=1)
+    before = [r for r in before if r["status"] != "not_assessed" and r["worst_cut"] > 0]
+    if not before:
+        return dict(ok=False, message="This road doesn't connect to an assessed neighbourhood with a choke point.")
+    worst = max(before, key=lambda r: r["worst_cut"])
+    new_area, line = with_new_road(area, a, b)
+    nb_nodes = next(nb.local_nodes for nb in neighbourhoods(area) if nb.nid == worst["nid"])
+    same_block = _choke_cut(new_area, nb_nodes, worst["choke"])
+    after = scan(new_area, only_nodes=nb_nodes | touched, min_homes=1)
+    after = max(after, key=lambda r: r["homes"]) if after else None
+    regained = max(0, worst["worst_cut"] - same_block["cut"])
+    to_ll = _TO_LL
+    return dict(
+        ok=True,
+        road=dict(type="Feature", properties=dict(length_m=round(line.length)), geometry=mapping(transform(to_ll, line))),
+        length_m=round(line.length),
+        before=dict(nid=worst["nid"], homes=worst["homes"], worst_cut=worst["worst_cut"], status=worst["status"]),
+        same_block_cut=same_block["cut"],
+        regained=regained,
+        after=None if after is None else dict(homes=after["homes"], worst_cut=after["worst_cut"], status=after["status"],
+                                              gateways=after["gateways"]),
+        after_geo=results_geojson([after]) if after is not None else None,
+    )
 
 
 _TO_LL = Transformer.from_crs(config.ANALYSIS_CRS, "EPSG:4326", always_xy=True).transform

@@ -4,6 +4,7 @@ from threading import Lock
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from . import config, engine
 
@@ -61,6 +62,16 @@ def roads(area: str):
 @app.get("/api/{area}/boundary")
 def boundary(area: str):
     return get(area)["boundary"]
+
+
+class Proposal(BaseModel):
+    a: tuple[float, float]   # lon, lat of first click
+    b: tuple[float, float]
+
+
+@app.post("/api/{area}/mitigate")
+def mitigate(area: str, p: Proposal):
+    return engine.mitigate(get(area)["area"], p.a, p.b)
 
 
 app.mount("/", StaticFiles(directory=config.REPO / "web", html=True), name="web")

@@ -24,6 +24,14 @@ h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: v
 .card .cut { font-size: 15px; margin: 6px 0; }
 .card .src, .fine { color: var(--muted); font-size: 12px; }
 .hidden { display: none; }
+#tools { display: flex; gap: 6px; margin-top: 12px; }
+#tools button { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #2f6f8f; background: #12303f;
+                color: #e6f4fb; font: inherit; font-weight: 600; cursor: pointer; }
+#tools button.on { background: #1f5a75; }
+#tools #clearBtn { flex: 0 0 auto; border-color: #444c56; background: #1b1f25; font-weight: 400; }
+#hint { margin-top: 6px; }
+.card.mitig { border-left-color: #35c3ff; }
+.card.mitig .big { color: #7fdcff; }
 #ranking { margin: 0; padding-left: 22px; }
 #ranking li { cursor: pointer; margin: 3px 0; }
 #ranking li:hover { color: #fff; text-decoration: underline; }
