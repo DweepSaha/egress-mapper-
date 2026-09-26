@@ -193,9 +193,20 @@ async function runMitigation() {
   document.getElementById("hint").classList.add("hidden");
   const box = document.getElementById("mitig");
   box.className = "card mitig"; box.innerHTML = "<div class='src'>Recalculating…</div>";
-  const r = await (await fetch(`/api/${current}/mitigate`, { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ a: clicks[0], b: clicks[1] }) })).json();
+  box.scrollIntoView({ block: "nearest" });
+  let r;
+  try {
+    const resp = await fetch(`/api/${current}/mitigate`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ a: clicks[0], b: clicks[1] }) });
+    if (!resp.ok) throw new Error(`server replied ${resp.status}`);
+    r = await resp.json();
+  } catch (err) {
+    console.error("mitigation request failed", err);
+    r = { ok: false, message: `Couldn't reach the analysis server (${err.message}). Is scripts/serve.py running?` };
+  }
   box.innerHTML = mitigHtml(r);
+  box.scrollIntoView({ block: "nearest" });
+  box.dataset.state = r.ok ? "done" : "error";   // used by the scripted demo check
   if (!r.ok) { map.getSource("proposal").setData(fc(clicks.map(pt))); return; }
   map.getSource("proposal").setData(fc([r.road, pt(r.road.geometry.coordinates[0]), pt(r.road.geometry.coordinates[1])]));
   if (r.after_geo) {
@@ -223,4 +234,9 @@ map.on("mouseleave", "nb-fill", () => (map.getCanvas().style.cursor = ""));
 const q = new URLSearchParams(location.search);
 await loadArea(areas[q.get("area")] ? q.get("area") : "tantallon");
 if (q.get("nid")) select(+q.get("nid"));
+// scripted demo / backup: &road=lonA,latA,lonB,latB runs the same mitigation path as two map clicks
+if (q.get("road")) {
+  const v = q.get("road").split(",").map(Number);
+  if (v.length === 4 && v.every(Number.isFinite)) { clicks = [[v[0], v[1]], [v[2], v[3]]]; runMitigation(); }
+}
 window.__app = { map, select, loadArea };   // for debugging / scripted demo
