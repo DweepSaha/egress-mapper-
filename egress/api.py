@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, engine
+from . import config, engine, flood
 
 AREAS = {
     "tantallon": dict(label="Upper Tantallon, NS", center=[-63.862, 44.715], zoom=13.2),
@@ -62,6 +62,22 @@ def roads(area: str):
 @app.get("/api/{area}/boundary")
 def boundary(area: str):
     return get(area)["boundary"]
+
+
+@app.get("/api/fredericton/flood")
+def flood_scenario(gauge: float):
+    """River level scenario: `gauge` is the user-supplied gauge height (m, CGVD28) at WSC 01AK003."""
+    if not 3.0 <= gauge <= 11.0:
+        raise HTTPException(400, "gauge must be between 3 and 11 m")
+    return flood.scenario(get("fredericton")["area"], gauge)
+
+
+@app.get("/api/fredericton/flood/info")
+def flood_info():
+    return dict(gauge=flood.GAUGE, offset_m=flood.CGVD28_TO_CGVD2013_M, flood_stage_gauge_m=flood.FLOOD_STAGE_GAUGE_M,
+                peak_2008_gauge_m=flood.PEAK_2008_GAUGE_M,
+                peak_2008_cgvd2013_m=round(flood.gauge_to_cgvd2013(flood.PEAK_2008_GAUGE_M), 2),
+                coverage=flood.coverage_geojson())
 
 
 class Proposal(BaseModel):

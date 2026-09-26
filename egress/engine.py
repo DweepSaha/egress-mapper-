@@ -59,6 +59,7 @@ class Edge:
     line: LineString          # oriented from u to v
     exit: bool                # qualifying class AND part of the through-road system (see _mark_spurs)
     qualifying: bool = False  # collector/arterial class, before the spur rule
+    bridge: bool = False      # OSM bridge tag; used only by the flood scenario (decks sit above the water)
     homes_t: dict = field(default_factory=lambda: {"osm": np.empty(0), "ms": np.empty(0)})  # positions along line
 
 
@@ -87,7 +88,7 @@ def load_area(name: str) -> Area:
         if Point(line.coords[0]).distance(Point(node_xy[u])) > Point(line.coords[0]).distance(Point(node_xy[v])):
             line = LineString(line.coords[::-1])  # orient u -> v
         q = bool(_classes(d.get("highway")) & EXIT_CLASSES)
-        edges.append(Edge(u, v, line, exit=q, qualifying=q))
+        edges.append(Edge(u, v, line, exit=q, qualifying=q, bridge=d.get("bridge") not in (None, "no")))
 
     to_m = Transformer.from_crs("EPSG:4326", config.ANALYSIS_CRS, always_xy=True).transform
     study = transform(to_m, box(*STUDY_BBOX[name]))
@@ -215,7 +216,13 @@ def evaluate_block(area: Area, nb: Neighbourhood, centre: Point) -> dict:
     nb_edges = set(nb.edge_idx)
     blocked = {int(i): _blocked_interval(area.edges[int(i)].line, circle)
                for i in area.edge_tree.query(circle, predicate="intersects") if int(i) in nb_edges}
+    return evaluate_blockage(area, nb, removed, blocked)
 
+
+def evaluate_blockage(area: Area, nb: Neighbourhood, removed: set, blocked: dict, gateways: set | None = None) -> dict:
+    """Homes in `nb` cut off from every usable gateway, given removed nodes and blocked intervals per edge index.
+    gateways: optionally restrict to gateways still connected onward (used by hazard scenarios)."""
+    usable = nb.gateways if gateways is None else nb.gateways & gateways
     adj = defaultdict(list)
     for i in nb.edge_idx:
         if i in blocked:
@@ -223,7 +230,7 @@ def evaluate_block(area: Area, nb: Neighbourhood, centre: Point) -> dict:
         e = area.edges[i]
         adj[e.u].append(e.v)
         adj[e.v].append(e.u)
-    reach = {g for g in nb.gateways if g not in removed}
+    reach = {g for g in usable if g not in removed}
     q = deque(reach)
     while q:
         n = q.popleft()

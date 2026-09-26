@@ -27,6 +27,20 @@
   </div>
   <div id="hint" class="fine hidden">Click two points on the map: the road will join the nearest existing road points.</div>
   <div id="mitig" class="card mitig hidden"></div>
+  <div id="floodBox" class="hidden">
+    <h2>River level scenario</h2>
+    <label class="toggle"><input type="checkbox" id="floodOn"> Show a river level on the map</label>
+    <div id="floodCtl" class="hidden">
+      <p class="fine">You choose the river level. This is a "what if" — not a flood forecast.</p>
+      <input type="range" id="gauge" min="5" max="9.5" step="0.01" value="8.36" list="gaugeTicks">
+      <datalist id="gaugeTicks"><option value="6.5"></option><option value="8.36"></option></datalist>
+      <div class="presets">
+        <button data-g="6.5">Flood stage 6.5 m</button>
+        <button data-g="8.36">2008 peak 8.36 m</button>
+      </div>
+      <div id="floodOut" class="card flood"></div>
+    </div>
+  </div>
   <h2>Largest single choke points</h2>
   <ol id="ranking"></ol>
   <p class="fine">Blocked area: a circle 100 m across, tested every 50 m along the roads. The blockage is a

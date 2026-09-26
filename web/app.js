@@ -71,6 +71,17 @@ map.addLayer({ id: "proposal-line", type: "line", source: "proposal", filter: ["
 map.addLayer({ id: "proposal-pts", type: "circle", source: "proposal", filter: ["==", ["geometry-type"], "Point"],
   paint: { "circle-color": "#35c3ff", "circle-radius": 6, "circle-stroke-color": "#fff", "circle-stroke-width": 1.5 } });
 
+// river level scenario layers (Fredericton only)
+for (const s of ["fl-water", "fl-roads", "fl-cut", "fl-cover"]) map.addSource(s, { type: "geojson", data: empty });
+map.addLayer({ id: "fl-cover", type: "line", source: "fl-cover", layout: { visibility: "none" },
+  paint: { "line-color": "#93c5fd", "line-width": 1.2, "line-dasharray": [3, 2], "line-opacity": 0.7 } }, "roads");
+map.addLayer({ id: "fl-water", type: "fill", source: "fl-water", layout: { visibility: "none" },
+  paint: { "fill-color": "#2563eb", "fill-opacity": 0.45 } }, "roads");
+map.addLayer({ id: "fl-roads", type: "line", source: "fl-roads", layout: { visibility: "none", "line-cap": "round" },
+  paint: { "line-color": "#22d3ee", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 6] } });
+map.addLayer({ id: "fl-cut", type: "line", source: "fl-cut", layout: { visibility: "none" },
+  paint: { "line-color": "#ffb020", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4.5] } });
+
 let current = null, scanData = null, selected = null;
 let drawing = false, clicks = [];
 
@@ -125,6 +136,10 @@ function renderRanking() {
 async function loadArea(name) {
   current = name;
   if (typeof clearMitigation === "function") clearMitigation();
+  if (typeof setFlood === "function") {
+    document.getElementById("floodBox").classList.toggle("hidden", name !== "fredericton");
+    if (name !== "fredericton") setFlood(false);
+  }
   document.querySelectorAll("#areas button").forEach((b) => b.classList.toggle("on", b.dataset.area === name));
   const [scan, roads, boundary] = await Promise.all(
     ["scan", "roads", "boundary"].map((k) => fetch(`/api/${name}/${k}`).then((r) => r.json())));
@@ -216,6 +231,64 @@ async function runMitigation() {
   if (selected !== r.before.nid) select(r.before.nid);
 }
 
+// ---------- river level scenario (Fredericton) ----------
+let floodInfo = null, floodReq = 0;
+const FLOOD_LAYERS = ["fl-cover", "fl-water", "fl-roads", "fl-cut"];
+const STREET_OPACITY = map.getPaintProperty("streets", "line-opacity");
+
+function floodHtml(s) {
+  const t = s.totals, lost = t.cut + t.inside;
+  return `<div class="big">${lost} mapped buildings lose their way out to a major road</div>
+    <div class="cut">River level ${s.gauge_m.toFixed(2)} m on the Fredericton gauge
+      (≈ ${s.water_cgvd2013_m.toFixed(2)} m elevation). ${s.flooded_road_km} km of mapped roads under water (cyan).</div>
+    <div class="src">${t.inside} are on streets under water; ${t.cut} more are cut off because every route out crosses
+      water (orange streets)${t.neighbourhoods ? `, in ${t.neighbourhoods} neighbourhood${t.neighbourhoods === 1 ? "" : "s"}` : ""}.</div>
+    <div class="src">Flat water level connected to the river; no flood defences or drainage modelled. Elevation data
+      covers the river corridor only (dashed outline) — roads outside it are treated as dry. Gauge heights are converted
+      to elevation with ${s.offset_m} m (NRCan). Flood stage 6.5 m; 2008 peak 8.36 m.</div>`;
+}
+
+async function runFlood(g) {
+  const req = ++floodReq;
+  const out = document.getElementById("floodOut");
+  out.innerHTML = `<div class="src">Calculating river level ${(+g).toFixed(2)} m…</div>`;
+  try {
+    const r = await fetch(`/api/fredericton/flood?gauge=${g}`);
+    if (!r.ok) throw new Error(`server replied ${r.status}`);
+    const s = await r.json();
+    if (req !== floodReq || current !== "fredericton") return;   // a newer request superseded this one
+    map.getSource("fl-water").setData(s.water);
+    map.getSource("fl-roads").setData(s.flooded_roads);
+    map.getSource("fl-cut").setData(s.cut_roads);
+    out.innerHTML = floodHtml(s);
+    out.dataset.state = "done";
+  } catch (err) {
+    out.innerHTML = `<div class="cut">Couldn't calculate this river level (${err.message}).</div>`;
+    out.dataset.state = "error";
+  }
+}
+
+async function setFlood(on) {
+  document.getElementById("floodOn").checked = on;
+  document.getElementById("floodCtl").classList.toggle("hidden", !on);
+  FLOOD_LAYERS.forEach((l) => map.setLayoutProperty(l, "visibility", on ? "visible" : "none"));
+  map.setPaintProperty("streets", "line-opacity", on ? 0.25 : STREET_OPACITY);   // dim the scan while the scenario shows
+  if (!on) return;
+  if (!floodInfo) {
+    floodInfo = await (await fetch("/api/fredericton/flood/info")).json();
+    map.getSource("fl-cover").setData(floodInfo.coverage);
+  }
+  runFlood(document.getElementById("gauge").value);
+}
+
+document.getElementById("floodOn").onchange = (e) => setFlood(e.target.checked);
+document.getElementById("gauge").onchange = (e) => runFlood(e.target.value);
+document.getElementById("gauge").oninput = (e) =>
+  (document.getElementById("floodOut").innerHTML = `<div class="src">River level ${(+e.target.value).toFixed(2)} m — release to calculate</div>`);
+document.querySelectorAll(".presets button").forEach((b) => (b.onclick = () => {
+  document.getElementById("gauge").value = b.dataset.g; runFlood(b.dataset.g);
+}));
+
 map.on("click", (e) => {
   if (!drawing) return;
   clicks.push([e.lngLat.lng, e.lngLat.lat]);
@@ -234,6 +307,8 @@ map.on("mouseleave", "nb-fill", () => (map.getCanvas().style.cursor = ""));
 const q = new URLSearchParams(location.search);
 await loadArea(areas[q.get("area")] ? q.get("area") : "tantallon");
 if (q.get("nid")) select(+q.get("nid"));
+// &gauge=8.36 opens the Fredericton river level scenario at that level
+if (q.get("gauge") && current === "fredericton") { document.getElementById("gauge").value = q.get("gauge"); setFlood(true); }
 // scripted demo / backup: &road=lonA,latA,lonB,latB runs the same mitigation path as two map clicks
 if (q.get("road")) {
   const v = q.get("road").split(",").map(Number);
