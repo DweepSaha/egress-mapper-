@@ -99,9 +99,9 @@ const STREET_OPACITY = map.getPaintProperty("streets", "line-opacity");
 // fire scenario layers (Tantallon only; hidden unless the fire scenario is active)
 for (const s of ["fi-zone", "fi-roads", "fi-cut"]) map.addSource(s, { type: "geojson", data: empty });
 map.addLayer({ id: "fi-zone", type: "fill", source: "fi-zone", layout: { visibility: "none" },
-  paint: { "fill-color": "#ef4444", "fill-opacity": 0.22 } }, "bld-fill");
+  paint: { "fill-color": "#ef4444", "fill-opacity": 0.06 } }, "bld-fill");
 map.addLayer({ id: "fi-zone-line", type: "line", source: "fi-zone", layout: { visibility: "none" },
-  paint: { "line-color": "#f87171", "line-width": 2, "line-dasharray": [2, 1] } });
+  paint: { "line-color": "#f87171", "line-width": 2.5, "line-dasharray": [3, 1.5] } });
 map.addLayer({ id: "fi-cut", type: "line", source: "fi-cut", layout: { visibility: "none" },
   paint: { "line-color": "#ff7a45", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4.5] } });
 map.addLayer({ id: "fi-roads", type: "line", source: "fi-roads", layout: { visibility: "none", "line-cap": "round" },
@@ -518,27 +518,42 @@ $("gauge").onchange = (e) => floodOn && enterFlood(e.target.value);  // on relea
 document.querySelectorAll("#floodCtl .presets button").forEach((b) => (b.onclick = () => enterFlood(b.dataset.g)));
 
 // ---------- fire scenario (Tantallon): road access under a SUPPLIED affected area; no fire-spread prediction ----------
+const km = (m) => `${(m / 1000).toFixed(2)} km`;
+const stat = (cls, label, c) => `<div class="fs ${cls}"><span class="n">${Math.max(c.osm, c.ms).toLocaleString()}</span>
+  <span class="l">${label}</span><span class="src">OSM ${c.osm.toLocaleString()} · Microsoft ${c.ms.toLocaleString()}</span></div>`;
+const FIRE_KEY = `<div class="firekey">
+  <div><span class="k zone"></span>Supplied affected area</div>
+  <div><span class="k road"></span>Road portions within the supplied affected area</div>
+  <div><span class="k inside"></span>Mapped building, centre inside the area</div>
+  <div><span class="k cut"></span>Outside the area, loses access to a major road (buildings and roads)</div>
+  <div><span class="k retain"></span>Keeps access</div></div>`;
+
 function fireHtml(s) {
   const c = s.counts;
   const head = s.kind === "historical"
     ? `<div class="big">Mapped 2023 fire perimeter</div>
-       <div class="src">${s.perimeter.source}; fire starting ${s.perimeter.start_date}; mapped area ${s.perimeter.mapped_ha} ha.
-         Used here as a supplied affected area.</div>
-       <div class="cut">The mapped perimeter did not reach Westwood Hills' two entrances on Hammonds Plains Road
-         (about ${s.westwood_entrances.map((e) => e.distance_m.toLocaleString() + " m").join(" and ")} away).
-         The 2023 difficulty was a single way out for the whole subdivision, not blocked entrances.</div>`
+       <div class="src">NBAC mapped area ${s.perimeter.mapped_ha} ha · fire starting ${s.perimeter.start_date}</div>`
     : `<div class="big">Supplied hypothetical affected area</div>
-       <div class="src">Circle of radius ${s.radius_m.toLocaleString()} m (${s.zone_ha} ha) at the point you chose.
-         The radius is your input, not a predicted fire extent.</div>`;
+       <div class="src">Radius ${s.radius_m.toLocaleString()} m (${s.zone_ha} ha) · your input, not a predicted fire extent</div>`;
+  const ents = s.kind === "historical"
+    ? `<div class="fnote">Westwood Hills entrances: outside the perimeter, about
+       ${s.westwood_entrances.map((e) => e.distance_m).sort((a, b) => a - b).map(km).join(" and ")} away.</div>` : "";
   return `${head}
-    <div class="cut">Roads inside the affected area: <b>${s.roads_affected_km} km</b> (yellow).</div>
-    <div class="cut">Mapped buildings outside the area that lose access to a major road: <b>${fmt(c.lose_access)}</b> (orange).</div>
-    <div class="cut">Mapped buildings with the building centre inside the affected area: <b>${fmt(c.inside)}</b> (violet).</div>
-    <div class="cut">Mapped buildings that keep access: ${fmt(c.keep_access)} (teal).</div>
-    <div class="src"><b>This tool does not predict fire spread.</b> No wind, weather, fire behaviour, traffic or
-      evacuation time is modelled; roads are impassable only inside the supplied area. Building status is classified by
-      its centre. Access counts cover assessed neighbourhoods of 30+ mapped buildings (as in the vulnerability scan);
-      the "centre inside" count covers every mapped building in the area.</div>`;
+    <div class="fstats">
+      <div class="fs road"><span class="n">${s.roads_affected_km} km</span>
+        <span class="l">road portions within the supplied affected area</span></div>
+      ${stat("cut", "outside the area, lose access", c.lose_access)}
+      ${stat("inside", "centre inside the area", c.inside)}
+      ${stat("retain", "keep access", c.keep_access)}
+    </div>
+    ${ents}
+    <div class="nopredict">This tool does not predict fire spread.</div>
+    ${FIRE_KEY}
+    <details class="src"><summary>How this is counted</summary>
+      Roads are treated as impassable only within the supplied area; no wind, weather, fire behaviour, traffic or
+      evacuation time is modelled. Buildings are classified by their centre. Access counts cover assessed
+      neighbourhoods of 30+ mapped buildings (as in the vulnerability scan); the centre-inside count covers every
+      mapped building in the area.</details>`;
 }
 
 function renderFireKey() {
@@ -710,4 +725,4 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
              clearVisible: !document.getElementById("clearBtn").classList.contains("hidden") };
   },
 };
-if (q.get("selftest")) import("/selftest.js");
+if (["1", "flood", "fire"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only
