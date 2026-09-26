@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Data lives outside the repo (see DATA.md); never commit large or derived data
+data/
+out/
+*.gpkg
+*.tif
+*.pbf
+*.osm
+*.graphml
+*.geojson
+!web/sample/*.geojson
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
