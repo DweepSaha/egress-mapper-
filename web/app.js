@@ -83,8 +83,23 @@ map.addLayer({ id: "proposal-line", type: "line", source: "proposal", filter: ["
 map.addLayer({ id: "proposal-pts", type: "circle", source: "proposal", filter: ["==", ["geometry-type"], "Point"],
   paint: { "circle-color": "#35c3ff", "circle-radius": 6, "circle-stroke-color": "#fff", "circle-stroke-width": 1.5 } });
 
+// flood scenario layers (Fredericton only; hidden unless the flood scenario is active)
+for (const s of ["fl-water", "fl-roads", "fl-cut", "fl-cover"]) map.addSource(s, { type: "geojson", data: empty });
+map.addLayer({ id: "fl-cover", type: "line", source: "fl-cover", layout: { visibility: "none" },
+  paint: { "line-color": "#93c5fd", "line-width": 1.2, "line-dasharray": [3, 2], "line-opacity": 0.7 } }, "bld-fill");
+map.addLayer({ id: "fl-water", type: "fill", source: "fl-water", layout: { visibility: "none" },
+  paint: { "fill-color": "#2563eb", "fill-opacity": 0.4 } }, "bld-fill");
+map.addLayer({ id: "fl-cut", type: "line", source: "fl-cut", layout: { visibility: "none" },
+  paint: { "line-color": "#ff7a45", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4.5] } });
+map.addLayer({ id: "fl-roads", type: "line", source: "fl-roads", layout: { visibility: "none", "line-cap": "round" },
+  paint: { "line-color": "#22d3ee", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 6] } });
+const FLOOD_LAYERS = ["fl-cover", "fl-water", "fl-cut", "fl-roads"];
+const SCAN_OVERLAYS = ["choke", "blocked", "cut"];   // hidden while the flood scenario is shown, restored after
+const STREET_OPACITY = map.getPaintProperty("streets", "line-opacity");
+
 let current = null, scanData = null, selected = null;
 let drawing = false, clicks = [];
+let floodOn = false, floodGen = 0, floodData = null, floodInfo = null, floodSavedSel = null, bldStateN = 0;
 
 function panelHtml(p) {
   const src = `Count: the higher of OpenStreetMap (${p.homes_osm}) and Microsoft (${p.homes_ms}) building footprints.`;
@@ -102,6 +117,7 @@ function panelHtml(p) {
 }
 
 function select(nid) {
+  if (floodOn) exitFlood(false);           // selecting a neighbourhood returns to the vulnerability view
   if (selected !== null) map.setFeatureState({ source: "streets", id: selected }, { selected: false });
   selected = nid;
   const f = scanData.neighbourhoods.features.find((f) => f.id === nid);
@@ -135,10 +151,15 @@ async function loadBuildings(area, src) {
 
 function applyBuildingCats() {
   map.removeFeatureState({ source: "bld" });
-  if (!bldCats || bldCats.area !== bldShown.area) return;
-  const s = bldCats.sources[bldShown.src];
-  for (const cat of ["retain", "cut", "inside"]) for (const id of s[cat]) map.setFeatureState({ source: "bld", id }, { cat });
-  renderBuildingInfo();
+  bldStateN = 0;
+  // the flood scenario and the selected-neighbourhood view never mix: one or the other drives the categories
+  const cats = floodOn ? (floodData && floodData.area === bldShown.area ? floodData.ids[bldShown.src] : null)
+                       : (bldCats && bldCats.area === bldShown.area ? bldCats.sources[bldShown.src] : null);
+  if (!cats) return;
+  for (const cat of ["retain", "cut", "inside"]) for (const id of cats[cat]) {
+    map.setFeatureState({ source: "bld", id }, { cat }); bldStateN++;
+  }
+  if (floodOn) renderFloodKey(); else renderBuildingInfo();
 }
 
 function renderBuildingInfo() {
@@ -183,7 +204,9 @@ function renderRanking() {
 }
 
 async function loadArea(name) {
+  if (floodOn) exitFlood(false);          // switching areas always clears the flood scenario
   current = name;
+  document.getElementById("floodBox").classList.toggle("hidden", name !== "fredericton");
   if (typeof clearMitigation === "function") clearMitigation();
   document.querySelectorAll("#areas button").forEach((b) => b.classList.toggle("on", b.dataset.area === name));
   const [scan, roads, boundary] = await Promise.all(
@@ -234,6 +257,7 @@ function clearMitigation() {
 }
 
 function startDrawing() {
+  if (floodOn) return;                     // the road test belongs to the vulnerability view, not the flood scenario
   clearMitigation();
   drawing = true;
   document.getElementById("drawBtn").classList.add("on");
@@ -303,8 +327,119 @@ map.on("click", (e) => {
 document.getElementById("drawBtn").onclick = startDrawing;
 document.getElementById("clearBtn").onclick = clearMitigation;
 
-map.on("click", "nb-fill", (e) => { if (!drawing) select(e.features[0].id); });
-map.on("click", "choke", (e) => { if (!drawing) select(e.features[0].properties.nid); });
+// ---------- flood scenario (Fredericton): road access under a USER-SUPPLIED river level ----------
+const $ = (id) => document.getElementById(id);
+const fmt = (c) => `${Math.max(c.osm, c.ms).toLocaleString()} <span class="src">(OSM ${c.osm.toLocaleString()} · Microsoft ${c.ms.toLocaleString()})</span>`;
+
+function updateGaugeReadout(g) {
+  const off = floodInfo ? floodInfo.offset_m : -0.489;
+  $("gaugeVal").textContent = `${(+g).toFixed(2)} m gauge height`;
+  $("gaugeElev").textContent = `compared with the elevation model as ${(+g + off).toFixed(2)} m (CGVD2013)`;
+}
+
+function floodHtml(s) {
+  const c = s.counts;
+  return `<div class="big">Supplied river level ${s.gauge_m.toFixed(2)} m (gauge)</div>
+    <div class="cut">Roads affected under this scenario: <b>${s.roads_affected_km} km</b> (cyan).</div>
+    <div class="cut">Mapped buildings that lose access: <b>${fmt(c.lose_access)}</b> — outside the water area, but every
+      route to a major road crosses it (orange).</div>
+    <div class="cut">Mapped buildings inside the supplied inundation area: <b>${fmt(c.inside)}</b> (violet).</div>
+    <div class="cut">Mapped buildings that keep access: ${fmt(c.keep_access)} (teal).</div>
+    <div class="src">This is not a flood prediction. The river level is your input; the water is a flat surface at
+      ${s.water_cgvd2013_m.toFixed(2)} m (CGVD2013) connected to the river channel — no river slope, flood defences or
+      drainage. Elevation data covers the river corridor only (dashed outline); roads outside it are treated as dry.
+      Bridges are treated as passable. Gauge height is converted with ${s.offset_m} m (NRCan). The vulnerability
+      classification is not changed by this scenario.</div>`;
+}
+
+function renderFloodKey() {
+  const el = $("floodBld");
+  if (!el || !floodData) return;
+  const btn = (src) => `<button data-src="${src}" class="${src === bldShown.src ? "on" : ""}">${SRC_LABEL[src]}</button>`;
+  el.innerHTML = `<div class="bldsrc">Footprints shown: ${btn("osm")}${btn("ms")}</div>`;
+  el.querySelectorAll("button[data-src]").forEach((b) => (b.onclick = () => {
+    bldPinned = b.dataset.src; loadBuildings(current, bldPinned).then(renderFloodKey);
+  }));
+}
+
+async function runFlood(g) {
+  const gen = ++floodGen, area = current;
+  const out = $("floodOut");
+  out.dataset.state = "pending";
+  out.innerHTML = `<div class="src">Calculating supplied river level ${(+g).toFixed(2)} m…</div>`;
+  let s;
+  try {
+    const r = await fetch(`/api/fredericton/flood?gauge=${(+g).toFixed(2)}`);
+    if (!r.ok) throw new Error(`server replied ${r.status}`);
+    s = await r.json();
+  } catch (err) {
+    if (gen !== floodGen || !floodOn || area !== current) return;
+    out.dataset.state = "error";
+    out.innerHTML = `<div class="cut">Couldn't calculate this scenario (${err.message}).</div>`;
+    return;
+  }
+  if (gen !== floodGen || !floodOn || area !== current) return;   // superseded: touch nothing
+  floodData = { ...s, area };
+  map.getSource("fl-water").setData(s.water);
+  map.getSource("fl-roads").setData(s.roads_affected);
+  map.getSource("fl-cut").setData(s.cut_roads);
+  out.innerHTML = floodHtml(s) + `<div id="floodBld"></div>`;
+  out.dataset.state = "done";
+  const src = bldPinned || (s.counts.lose_access.ms > s.counts.lose_access.osm ? "ms" : "osm");
+  if (bldShown.src !== src) await loadBuildings(current, src); else applyBuildingCats();
+  if (gen === floodGen && floodOn) applyBuildingCats();
+}
+
+async function enterFlood(g) {
+  if (current !== "fredericton") return;
+  if (!floodOn) {
+    clearMitigation();
+    floodSavedSel = selected;
+    if (selected !== null) map.setFeatureState({ source: "streets", id: selected }, { selected: false });
+    selected = null;
+    $("panel").classList.add("hidden");
+    floodOn = true;
+    SCAN_OVERLAYS.forEach((l) => map.setLayoutProperty(l, "visibility", "none"));
+    map.setPaintProperty("streets", "line-opacity", 0.25);
+    FLOOD_LAYERS.forEach((l) => map.setLayoutProperty(l, "visibility", "visible"));
+    $("drawBtn").disabled = true;
+    $("floodOnBox").checked = true;
+    $("floodCtl").classList.remove("hidden");
+    applyBuildingCats();
+    if (!floodInfo) {
+      floodInfo = await (await fetch("/api/fredericton/flood/info")).json();
+      if (!floodOn) return;
+      map.getSource("fl-cover").setData(floodInfo.coverage);
+    }
+  }
+  if (g !== undefined) $("gauge").value = g;
+  updateGaugeReadout($("gauge").value);
+  return runFlood($("gauge").value);
+}
+
+function exitFlood(restoreSelection = true) {
+  floodGen++;                                   // invalidate any pending scenario request
+  floodOn = false; floodData = null;
+  FLOOD_LAYERS.filter((l) => l !== "fl-cover").forEach((l) => map.getSource(l).setData(empty));
+  FLOOD_LAYERS.forEach((l) => map.setLayoutProperty(l, "visibility", "none"));
+  SCAN_OVERLAYS.forEach((l) => map.setLayoutProperty(l, "visibility", "visible"));
+  map.setPaintProperty("streets", "line-opacity", STREET_OPACITY);
+  $("drawBtn").disabled = false;
+  $("floodOnBox").checked = false;
+  $("floodCtl").classList.add("hidden");
+  $("floodOut").innerHTML = ""; delete $("floodOut").dataset.state;
+  applyBuildingCats();
+  const sel = floodSavedSel; floodSavedSel = null;
+  if (restoreSelection && sel !== null) select(sel);
+}
+
+$("floodOnBox").onchange = (e) => (e.target.checked ? enterFlood() : exitFlood());
+$("gauge").oninput = (e) => updateGaugeReadout(e.target.value);
+$("gauge").onchange = (e) => floodOn && runFlood(e.target.value);    // calculate on release, not every step
+document.querySelectorAll("#floodCtl .presets button").forEach((b) => (b.onclick = () => enterFlood(b.dataset.g)));
+
+map.on("click", "nb-fill", (e) => { if (!drawing && !floodOn) select(e.features[0].id); });
+map.on("click", "choke", (e) => { if (!drawing && !floodOn) select(e.features[0].properties.nid); });
 map.on("mouseenter", "nb-fill", () => (map.getCanvas().style.cursor = "pointer"));
 map.on("mouseleave", "nb-fill", () => (map.getCanvas().style.cursor = ""));
 
@@ -320,6 +455,17 @@ if (q.get("road")) {
 window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
   map, select, loadArea, clear: clearMitigation,
   propose(a, b) { clearMitigation(); clicks = [a, b]; return runMitigation(); },
+  flood: (g) => enterFlood(g), unflood: () => exitFlood(),
+  snapshot() {   // map/UI state used to check that leaving the flood scenario restores the exact baseline
+    const vis = Object.fromEntries(map.getStyle().layers.map((l) => [l.id, map.getLayoutProperty(l.id, "visibility") ?? "visible"]));
+    return JSON.stringify({ vis, streetsOpacity: map.getPaintProperty("streets", "line-opacity"),
+      filters: SCAN_OVERLAYS.map((l) => map.getFilter(l)), selected, panelHidden: $("panel").classList.contains("hidden"),
+      panelText: $("panel").textContent.replace(/\s+/g, " ").trim(), drawDisabled: $("drawBtn").disabled,
+      floodCtlHidden: $("floodCtl").classList.contains("hidden"), bldStates: bldStateN, floodOn });
+  },
+  floodState: () => ({ on: floodOn, area: current, cardState: $("floodOut").dataset.state || null,
+    cardText: $("floodOut").textContent.replace(/\s+/g, " ").trim(), bldStates: bldStateN,
+    boxHidden: $("floodBox").classList.contains("hidden") }),
   state() {
     const box = document.getElementById("mitig");
     return { area: current, cardHidden: box.classList.contains("hidden"), cardState: box.dataset.state || null,

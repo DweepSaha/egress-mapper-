@@ -44,6 +44,8 @@ h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: v
 .presets button { flex: 1; padding: 5px; border-radius: 6px; border: 1px solid #2b4f7a; background: #142233;
                   color: var(--fg); font: inherit; font-size: 12px; cursor: pointer; }
 .card.flood { border-left-color: #3b82f6; }
+.gaugehead { margin-top: 8px; }
+#tools button:disabled { opacity: 0.4; cursor: not-allowed; }
 .card.flood .big { color: #93c5fd; }
 .card.mitig { border-left-color: #35c3ff; }
 .card.mitig .big { color: #7fdcff; }

@@ -7,7 +7,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, engine, viz
+from . import config, engine, flood, viz
 
 AREAS = {
     "tantallon": dict(label="Upper Tantallon, NS", center=[-63.862, 44.715], zoom=13.2),
@@ -87,6 +87,25 @@ def nb_buildings(area: str, nid: int):
     if key not in c:
         c[key] = viz.categories(c["area"], r)
     return c[key]
+
+
+@app.get("/api/fredericton/flood/info")
+def flood_info():
+    """Reference values (gauge heights, CGVD28) with their CGVD2013 equivalents, and elevation-model coverage."""
+    return dict(gauge=flood.GAUGE, offset_m=flood.CGVD28_TO_CGVD2013_M,
+                flood_stage_gauge_m=flood.FLOOD_STAGE_GAUGE_M,
+                flood_stage_cgvd2013_m=round(flood.gauge_to_cgvd2013(flood.FLOOD_STAGE_GAUGE_M), 2),
+                peak_2008_gauge_m=flood.PEAK_2008_GAUGE_M,
+                peak_2008_cgvd2013_m=round(flood.gauge_to_cgvd2013(flood.PEAK_2008_GAUGE_M), 2),
+                coverage=flood.coverage_geojson())
+
+
+@app.get("/api/fredericton/flood")
+def flood_scenario(gauge: float):
+    """Road access under a USER-SUPPLIED river level: `gauge` = gauge height (m, CGVD28) at WSC 01AK003."""
+    if not 3.0 <= gauge <= 11.0:
+        raise HTTPException(400, "gauge must be between 3 and 11 m")
+    return flood.scenario(get("fredericton")["area"], gauge)
 
 
 class Proposal(BaseModel):
