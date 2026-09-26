@@ -1,0 +1,2 @@
+# keep vendored files byte-identical to the verified npm release (hashes in web/vendor/VERSIONS.txt)
+web/vendor/** -text

@@ -296,6 +296,7 @@ def scan(area: Area) -> list[dict]:
                             homes_ms=nb.homes["ms"], gateways=len(nb.gateways), worst_cut=worst["cut"],
                             worst_cut_osm=worst["cut_osm"], worst_cut_ms=worst["cut_ms"],
                             worst_inside=worst["inside"], choke=worst_pt, geometry=footprint,
+                            streets=shapely.MultiLineString(lines),   # display only: the neighbourhood's roads
                             cut_lines=shapely.union_all([area.edges[i].line for i in worst["cut_edges"]])
                             if worst["cut_edges"] else None))
     # rank the assessed neighbourhoods by homes that could be cut off (1 = worst)
@@ -308,7 +309,7 @@ def scan(area: Area) -> list[dict]:
 
 
 _TO_LL = Transformer.from_crs(config.ANALYSIS_CRS, "EPSG:4326", always_xy=True).transform
-GEOM_KEYS = ("geometry", "choke", "cut_lines")
+GEOM_KEYS = ("geometry", "choke", "cut_lines", "streets")
 
 
 def _fc(feats):
@@ -317,11 +318,14 @@ def _fc(feats):
 
 def results_geojson(results: list[dict]) -> dict:
     """Web-ready (lon/lat) feature collections: neighbourhoods, choke points (+ blocked circle), cut roads."""
-    nb, choke, circles, cut = [], [], [], []
+    nb, streets, choke, circles, cut = [], [], [], [], []
     for r in results:
         props = {k: v for k, v in r.items() if k not in GEOM_KEYS}
         nb.append(dict(type="Feature", id=r["nid"], properties=props,
                        geometry=mapping(transform(_TO_LL, r["geometry"].simplify(5)))))
+        streets.append(dict(type="Feature", id=r["nid"],
+                            properties=dict(nid=r["nid"], status=r["status"], worst_cut=r["worst_cut"]),
+                            geometry=mapping(transform(_TO_LL, r["streets"].simplify(2)))))
         if r["choke"] is not None:
             p = dict(nid=r["nid"], status=r["status"], worst_cut=r["worst_cut"], rank=r["rank"],
                      radius_m=BLOCK_RADIUS_M)
@@ -331,7 +335,8 @@ def results_geojson(results: list[dict]) -> dict:
         if r["cut_lines"] is not None:
             cut.append(dict(type="Feature", properties=dict(nid=r["nid"]),
                             geometry=mapping(transform(_TO_LL, r["cut_lines"]))))
-    return dict(neighbourhoods=_fc(nb), chokepoints=_fc(choke), blocked=_fc(circles), cut_roads=_fc(cut))
+    return dict(neighbourhoods=_fc(nb), streets=_fc(streets), chokepoints=_fc(choke), blocked=_fc(circles),
+                cut_roads=_fc(cut))
 
 
 def roads_geojson(area: Area) -> dict:
