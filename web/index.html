@@ -27,6 +27,24 @@
   </div>
   <div id="hint" class="fine hidden">Click two points on the map: each end joins the nearest existing road junction or road end (within 400 m).</div>
   <div id="mitig" class="card mitig hidden"></div>
+  <div id="fireBox" class="hidden">
+    <h2>Fire scenario</h2>
+    <label class="toggle"><input type="checkbox" id="fireOnBox"> Show road access under a supplied affected area</label>
+    <div id="fireCtl" class="hidden">
+      <p class="fine"><b>This tool does not predict fire spread.</b> You supply the affected area; the map shows road
+        access under it. The vulnerability classification is not changed.</p>
+      <div class="presets" id="fireModes">
+        <button data-mode="hyp" class="on">Hypothetical area</button>
+        <button data-mode="hist">Mapped 2023 fire perimeter</button>
+      </div>
+      <div id="fireHyp">
+        <div class="gaugehead">Supplied hypothetical affected area: radius <b id="fireRadiusVal">500 m</b></div>
+        <input type="range" id="fireRadius" min="100" max="2000" step="50" value="500">
+        <p class="fine" id="fireHint">Click the map to place the centre. The radius is your input, not a predicted fire extent.</p>
+      </div>
+      <div id="fireOut" class="card fire"></div>
+    </div>
+  </div>
   <div id="floodBox" class="hidden">
     <h2>Flood scenario</h2>
     <label class="toggle"><input type="checkbox" id="floodOnBox"> Show road access under a supplied river level</label>

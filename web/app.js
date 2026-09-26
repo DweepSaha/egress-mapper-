@@ -96,6 +96,18 @@ map.addLayer({ id: "fl-roads", type: "line", source: "fl-roads", layout: { visib
 const FLOOD_LAYERS = ["fl-cover", "fl-water", "fl-cut", "fl-roads"];
 const SCAN_OVERLAYS = ["choke", "blocked", "cut"];   // hidden while the flood scenario is shown, restored after
 const STREET_OPACITY = map.getPaintProperty("streets", "line-opacity");
+// fire scenario layers (Tantallon only; hidden unless the fire scenario is active)
+for (const s of ["fi-zone", "fi-roads", "fi-cut"]) map.addSource(s, { type: "geojson", data: empty });
+map.addLayer({ id: "fi-zone", type: "fill", source: "fi-zone", layout: { visibility: "none" },
+  paint: { "fill-color": "#ef4444", "fill-opacity": 0.22 } }, "bld-fill");
+map.addLayer({ id: "fi-zone-line", type: "line", source: "fi-zone", layout: { visibility: "none" },
+  paint: { "line-color": "#f87171", "line-width": 2, "line-dasharray": [2, 1] } });
+map.addLayer({ id: "fi-cut", type: "line", source: "fi-cut", layout: { visibility: "none" },
+  paint: { "line-color": "#ff7a45", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4.5] } });
+map.addLayer({ id: "fi-roads", type: "line", source: "fi-roads", layout: { visibility: "none", "line-cap": "round" },
+  paint: { "line-color": "#fde047", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 6] } });
+const FIRE_LAYERS = ["fi-zone", "fi-zone-line", "fi-cut", "fi-roads"];
+let fireOn = false, fireGen = 0, fireData = null, fireMode = "hyp", fireCentre = null, fireSavedSel = null, fireSavedBld = null;
 
 let current = null, scanData = null, selected = null;
 let drawing = false, clicks = [];
@@ -143,6 +155,7 @@ function panelHtml(p) {
 
 function select(nid) {
   if (floodOn) exitFlood(false);           // selecting a neighbourhood returns to the vulnerability view
+  if (fireOn) exitFire(false);
   if (selected !== null) map.setFeatureState({ source: "streets", id: selected }, { selected: false });
   selected = nid;
   const f = scanData.neighbourhoods.features.find((f) => f.id === nid);
@@ -188,7 +201,8 @@ function applyBuildingCats() {
   bldStateN = 0;
   if (!bldShown.ready) return;                 // never paint one source's ids onto the other source's polygons
   // the flood scenario and the selected-neighbourhood view never mix: one or the other drives the categories
-  const cats = floodOn ? (floodData && floodData.area === bldShown.area ? floodData.ids[bldShown.src] : null)
+  const scen = floodOn ? floodData : fireOn ? fireData : null;     // a scenario mode, if active, owns the categories
+  const cats = (floodOn || fireOn) ? (scen && scen.area === bldShown.area ? scen.ids[bldShown.src] : null)
                        : (bldCats && bldCats.area === bldShown.area ? bldCats.sources[bldShown.src] : null);
   if (!cats) return;
   const ns = bldShown.ns;
@@ -196,7 +210,7 @@ function applyBuildingCats() {
     map.setFeatureState({ source: "bld", id: id + ns }, { cat }); bldStateN++;
   }
   bldAppliedNs = ns;
-  if (floodOn) renderFloodKey(); else renderBuildingInfo();
+  if (floodOn) renderFloodKey(); else if (fireOn) renderFireKey(); else renderBuildingInfo();
 }
 
 function renderBuildingInfo() {
@@ -242,6 +256,7 @@ function renderRanking() {
 
 async function loadArea(name) {
   if (floodOn) exitFlood(false);          // switching areas always clears the flood scenario
+  if (fireOn) exitFire(false);            // ...and the fire scenario
   // clear the old area's building categories and footprints NOW, not when the new footprints arrive
   bldCats = null; bldPinned = null;
   map.removeFeatureState({ source: "bld" }); bldStateN = 0;
@@ -249,6 +264,7 @@ async function loadArea(name) {
   map.getSource("bld").setData(empty); bldShown = { area: null, src: null, ready: false };
   current = name;
   document.getElementById("floodBox").classList.toggle("hidden", name !== "fredericton");
+  document.getElementById("fireBox").classList.toggle("hidden", name !== "tantallon");
   if (typeof clearMitigation === "function") clearMitigation();
   document.querySelectorAll("#areas button").forEach((b) => b.classList.toggle("on", b.dataset.area === name));
   const [scan, roads, boundary] = await Promise.all(
@@ -298,7 +314,7 @@ function clearMitigation() {
 }
 
 function startDrawing() {
-  if (floodOn) return;                     // the road test belongs to the vulnerability view, not the flood scenario
+  if (floodOn || fireOn) return;           // the road test belongs to the vulnerability view, not a scenario mode
   clearMitigation();
   drawing = true;
   document.getElementById("drawBtn").classList.add("on");
@@ -501,8 +517,135 @@ $("gauge").oninput = (e) => updateGaugeReadout(e.target.value);
 $("gauge").onchange = (e) => floodOn && enterFlood(e.target.value);  // on release; an explicit level supersedes older inits
 document.querySelectorAll("#floodCtl .presets button").forEach((b) => (b.onclick = () => enterFlood(b.dataset.g)));
 
-map.on("click", "nb-fill", (e) => { if (!drawing && !floodOn) select(e.features[0].id); });
-map.on("click", "choke", (e) => { if (!drawing && !floodOn) select(e.features[0].properties.nid); });
+// ---------- fire scenario (Tantallon): road access under a SUPPLIED affected area; no fire-spread prediction ----------
+function fireHtml(s) {
+  const c = s.counts;
+  const head = s.kind === "historical"
+    ? `<div class="big">Mapped 2023 fire perimeter</div>
+       <div class="src">${s.perimeter.source}; fire starting ${s.perimeter.start_date}; mapped area ${s.perimeter.mapped_ha} ha.
+         Used here as a supplied affected area.</div>
+       <div class="cut">The mapped perimeter did not reach Westwood Hills' two entrances on Hammonds Plains Road
+         (about ${s.westwood_entrances.map((e) => e.distance_m.toLocaleString() + " m").join(" and ")} away).
+         The 2023 difficulty was a single way out for the whole subdivision, not blocked entrances.</div>`
+    : `<div class="big">Supplied hypothetical affected area</div>
+       <div class="src">Circle of radius ${s.radius_m.toLocaleString()} m (${s.zone_ha} ha) at the point you chose.
+         The radius is your input, not a predicted fire extent.</div>`;
+  return `${head}
+    <div class="cut">Roads inside the affected area: <b>${s.roads_affected_km} km</b> (yellow).</div>
+    <div class="cut">Mapped buildings outside the area that lose access to a major road: <b>${fmt(c.lose_access)}</b> (orange).</div>
+    <div class="cut">Mapped buildings with the building centre inside the affected area: <b>${fmt(c.inside)}</b> (violet).</div>
+    <div class="cut">Mapped buildings that keep access: ${fmt(c.keep_access)} (teal).</div>
+    <div class="src"><b>This tool does not predict fire spread.</b> No wind, weather, fire behaviour, traffic or
+      evacuation time is modelled; roads are impassable only inside the supplied area. Building status is classified by
+      its centre. Access counts cover assessed neighbourhoods of 30+ mapped buildings (as in the vulnerability scan);
+      the "centre inside" count covers every mapped building in the area.</div>`;
+}
+
+function renderFireKey() {
+  const el = $("fireBld");
+  if (!el || !fireData) return;
+  const btn = (src) => `<button data-src="${src}" class="${src === bldShown.src ? "on" : ""}">${SRC_LABEL[src]}</button>`;
+  el.innerHTML = `<div class="bldsrc">Footprints shown: ${btn("osm")}${btn("ms")}</div>`;
+  el.querySelectorAll("button[data-src]").forEach((b) => (b.onclick = () => {
+    bldPinned = b.dataset.src; loadBuildings(current, bldPinned).then(renderFireKey);
+  }));
+}
+
+async function runFire() {
+  const gen = ++fireGen, area = current, mode = fireMode;
+  const out = $("fireOut");
+  if (mode === "hyp" && !fireCentre) { out.innerHTML = ""; delete out.dataset.state; return; }
+  const radius = +$("fireRadius").value;
+  const url = mode === "hist" ? "/api/tantallon/fire/historical"
+    : `/api/tantallon/fire/hypothetical?lon=${fireCentre[0]}&lat=${fireCentre[1]}&radius=${radius}`;
+  out.dataset.state = "pending";
+  out.innerHTML = `<div class="src">Calculating…</div>`;
+  let s;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`server replied ${r.status}`);
+    s = await r.json();
+  } catch (err) {
+    if (gen !== fireGen || !fireOn || area !== current) return;
+    out.dataset.state = "error"; out.innerHTML = `<div class="cut">Couldn't calculate this scenario (${err.message}).</div>`;
+    return;
+  }
+  if (gen !== fireGen || !fireOn || area !== current || mode !== fireMode) return;   // superseded: touch nothing
+  fireData = { ...s, area };
+  map.getSource("fi-zone").setData(s.zone);
+  map.getSource("fi-roads").setData(s.roads_affected);
+  map.getSource("fi-cut").setData(s.cut_roads);
+  out.innerHTML = fireHtml(s) + `<div id="fireBld"></div>`;
+  out.dataset.state = "done";
+  const src = bldPinned || (s.counts.lose_access.ms > s.counts.lose_access.osm ? "ms" : "osm");
+  if (bldShown.src !== src) loadBuildings(current, src); else applyBuildingCats();
+}
+
+function setFireMode(mode) {
+  fireMode = mode;
+  document.querySelectorAll("#fireModes button").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
+  $("fireHyp").classList.toggle("hidden", mode !== "hyp");
+  fireGen++; fireData = null;                                   // a new mode supersedes any pending calculation
+  ["fi-zone", "fi-roads", "fi-cut"].forEach((l) => map.getSource(l).setData(empty));
+  applyBuildingCats();
+  map.getCanvas().style.cursor = fireOn && mode === "hyp" ? "crosshair" : "";
+  if (fireOn) runFire();
+}
+
+function enterFire(mode) {
+  if (current !== "tantallon") return;
+  if (!fireOn) {
+    clearMitigation();
+    fireSavedSel = selected;
+    fireSavedBld = { src: bldShown.src, pinned: bldPinned };   // restored exactly on exit
+    if (selected !== null) map.setFeatureState({ source: "streets", id: selected }, { selected: false });
+    selected = null;
+    $("panel").classList.add("hidden");
+    fireOn = true;
+    SCAN_OVERLAYS.forEach((l) => map.setLayoutProperty(l, "visibility", "none"));
+    map.setPaintProperty("streets", "line-opacity", 0.25);
+    FIRE_LAYERS.forEach((l) => map.setLayoutProperty(l, "visibility", "visible"));
+    $("drawBtn").disabled = true;
+    $("fireOnBox").checked = true;
+    $("fireCtl").classList.remove("hidden");
+  }
+  setFireMode(mode || fireMode);
+}
+
+function exitFire(restoreSelection = true) {
+  fireGen++;                                    // invalidate any pending scenario request
+  fireOn = false; fireData = null; fireCentre = null;
+  ["fi-zone", "fi-roads", "fi-cut"].forEach((l) => map.getSource(l).setData(empty));
+  FIRE_LAYERS.forEach((l) => map.setLayoutProperty(l, "visibility", "none"));
+  SCAN_OVERLAYS.forEach((l) => map.setLayoutProperty(l, "visibility", "visible"));
+  map.setPaintProperty("streets", "line-opacity", STREET_OPACITY);
+  map.getCanvas().style.cursor = "";
+  $("drawBtn").disabled = false;
+  $("fireOnBox").checked = false;
+  $("fireCtl").classList.add("hidden");
+  $("fireOut").innerHTML = ""; delete $("fireOut").dataset.state;
+  const saved = fireSavedBld; fireSavedBld = null;
+  if (restoreSelection && saved) {
+    bldPinned = saved.pinned;
+    if (saved.src && bldShown.src !== saved.src) loadBuildings(current, saved.src);
+  }
+  applyBuildingCats();
+  const sel = fireSavedSel; fireSavedSel = null;
+  if (restoreSelection && sel !== null) select(sel);
+}
+
+$("fireOnBox").onchange = (e) => (e.target.checked ? enterFire() : exitFire());
+document.querySelectorAll("#fireModes button").forEach((b) => (b.onclick = () => fireOn && setFireMode(b.dataset.mode)));
+$("fireRadius").oninput = (e) => ($("fireRadiusVal").textContent = `${(+e.target.value).toLocaleString()} m`);
+$("fireRadius").onchange = () => fireOn && fireMode === "hyp" && runFire();   // on release
+map.on("click", (e) => {
+  if (!fireOn || fireMode !== "hyp") return;
+  fireCentre = [+e.lngLat.lng.toFixed(6), +e.lngLat.lat.toFixed(6)];
+  runFire();
+});
+
+map.on("click", "nb-fill", (e) => { if (!drawing && !floodOn && !fireOn) select(e.features[0].id); });
+map.on("click", "choke", (e) => { if (!drawing && !floodOn && !fireOn) select(e.features[0].properties.nid); });
 map.on("mouseenter", "nb-fill", () => (map.getCanvas().style.cursor = "pointer"));
 map.on("mouseleave", "nb-fill", () => (map.getCanvas().style.cursor = ""));
 
@@ -547,6 +690,15 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
       floodCtlHidden: $("floodCtl").classList.contains("hidden"), bldStates: bldStateN, floodOn,
       bldSrc: bldShown.src, bldPinned });
   },
+  fire(mode, centre, radius) {   // test hook: enter the fire scenario (optionally at a centre/radius)
+    if (radius) { $("fireRadius").value = radius; $("fireRadiusVal").textContent = `${radius} m`; }
+    if (centre) fireCentre = centre;
+    enterFire(mode);
+  },
+  unfire: () => exitFire(),
+  fireState: () => ({ on: fireOn, mode: fireMode, area: current, cardState: $("fireOut").dataset.state || null,
+    cardText: $("fireOut").textContent.replace(/\s+/g, " ").trim(), bldStates: bldStateN,
+    boxHidden: $("fireBox").classList.contains("hidden") }),
   floodState: () => ({ on: floodOn, area: current, cardState: $("floodOut").dataset.state || null,
     cardText: $("floodOut").textContent.replace(/\s+/g, " ").trim(), bldStates: bldStateN,
     boxHidden: $("floodBox").classList.contains("hidden"), coverFeatures,

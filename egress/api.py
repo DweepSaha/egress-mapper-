@@ -7,7 +7,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, engine, flood, viz
+from . import config, engine, fire, flood, viz
 
 AREAS = {
     "tantallon": dict(label="Upper Tantallon, NS", center=[-63.862, 44.715], zoom=13.2),
@@ -106,6 +106,20 @@ def flood_scenario(gauge: float):
     if not 3.0 <= gauge <= 11.0:
         raise HTTPException(400, "gauge must be between 3 and 11 m")
     return flood.scenario(get("fredericton")["area"], gauge)
+
+
+@app.get("/api/tantallon/fire/historical")
+def fire_historical():
+    """Road access under the MAPPED 2023 Upper Tantallon fire perimeter (NBAC). Not a fire-spread prediction."""
+    return fire.historical(get("tantallon")["area"])
+
+
+@app.get("/api/tantallon/fire/hypothetical")
+def fire_hypothetical(lon: float, lat: float, radius: float):
+    """Road access under a SUPPLIED hypothetical circular area. The radius is an input, not predicted spread."""
+    if not fire.MIN_RADIUS_M <= radius <= fire.MAX_RADIUS_M:
+        raise HTTPException(400, f"radius must be {fire.MIN_RADIUS_M:.0f}-{fire.MAX_RADIUS_M:.0f} m")
+    return fire.hypothetical(get("tantallon")["area"], lon, lat, radius)
 
 
 class Proposal(BaseModel):

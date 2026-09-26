@@ -11,6 +11,7 @@ const arrivals = [];
 const floodDelays = [];   // delays (ms) applied, in order, to /flood?gauge= responses
 const infoDelays = [];    // ... to /flood/info responses
 const bldDelays = [];     // ... to /buildings/ footprint responses
+const fireDelays = [];    // ... to /fire/ scenario responses
 window.fetch = async (url, opts) => {
   for (const [needle, q] of [["/flood/info", infoDelays], ["/buildings/", bldDelays]]) {
     if (String(url).includes(needle)) {
@@ -19,6 +20,13 @@ window.fetch = async (url, opts) => {
       await sleep(d);
       return resp;
     }
+  }
+  if (String(url).includes("/fire/")) {
+    const d = fireDelays.length ? fireDelays.shift() : 0;
+    const resp = await realFetch(url, opts);
+    await sleep(d);
+    arrivals.push(String(url).includes("historical") ? "fire hist" : "fire r=" + String(url).split("radius=")[1]);
+    return resp;
   }
   if (String(url).includes("/flood?gauge=")) {
     const d = floodDelays.length ? floodDelays.shift() : 0;
@@ -145,9 +153,59 @@ async function floodSuite() {
          ["fl-water", "fl-roads", "fl-cut", "fl-cover"].every((l) => snap6.vis[l] === "none"), { s6 });
 }
 
+async function fireSuite() {
+  const waitDone = async () => { for (let i = 0; i < 150 && app.fireState().cardState !== "done"; i++) await sleep(200); };
+  const vis = () => JSON.parse(app.snapshot()).vis;
+  const FIRE = ["fi-zone", "fi-zone-line", "fi-cut", "fi-roads"], SCAN = ["choke", "blocked", "cut"];
+  const C = [-63.854, 44.7052];
+  await app.loadArea("fredericton");
+  record("X1 fire control only on Tantallon", app.fireState().boxHidden, app.fireState());
+  await app.loadArea("tantallon"); app.select(99);
+  record("X1b fire control shown on Tantallon", !app.fireState().boxHidden, app.fireState());
+
+  // X2 historical: labelled as the mapped 2023 perimeter, entrances outside, no-spread statement, scan overlays hidden
+  app.fire("hist"); await waitDone();
+  const h = app.fireState(), vh = vis();
+  record("X2 historical card", h.on && h.mode === "hist" && h.cardText.includes("Mapped 2023 fire perimeter") &&
+         h.cardText.includes("did not reach Westwood Hills' two entrances") && h.cardText.includes("1,220 m") &&
+         h.cardText.includes("955 m") && h.cardText.includes("This tool does not predict fire spread") &&
+         FIRE.every((l) => vh[l] === "visible") && SCAN.every((l) => vh[l] === "none"), { card: h.cardText.slice(0, 200), vh });
+
+  // X3 hypothetical: two radii, first answers LAST -> only the newer one is shown
+  arrivals.length = 0; fireDelays.push(2500, 0);
+  app.fire("hyp", C, 1500); await sleep(100); app.fire("hyp", C, 300);
+  await sleep(3200); await waitDone();
+  const x3 = app.fireState();
+  record("X3 reversed hypothetical responses", arrivals.join(",") === "fire r=300,fire r=1500" &&
+         x3.cardText.includes("radius 300 m") && !x3.cardText.includes("1,500 m") &&
+         x3.cardText.includes("not a predicted fire extent"), { arrivals: arrivals.slice(), card: x3.cardText.slice(0, 120) });
+
+  // X4 mode switch while pending: the old hypothetical answer must not overwrite the historical card
+  arrivals.length = 0; fireDelays.push(2000, 0);
+  app.fire("hyp", C, 800); await sleep(100); app.fire("hist");
+  await sleep(2500); await waitDone();
+  const x4 = app.fireState();
+  record("X4 mode switch while pending", x4.mode === "hist" && x4.cardText.includes("Mapped 2023 fire perimeter") &&
+         !x4.cardText.includes("radius 800"), { arrivals: arrivals.slice(), card: x4.cardText.slice(0, 80) });
+
+  // X5 exit restores the vulnerability view and selection exactly
+  app.unfire(); await sleep(300);
+  const x5 = app.fireState(), v5 = vis(), st5 = JSON.parse(app.snapshot());
+  record("X5 exit restores view", !x5.on && x5.cardText === "" && FIRE.every((l) => v5[l] === "none") &&
+         SCAN.every((l) => v5[l] === "visible") && st5.selected === 99, { x5, selected: st5.selected, v5 });
+
+  // X6 area switch while a fire request is pending clears everything
+  fireDelays.push(2000); app.fire("hyp", C, 500); await sleep(200);
+  await app.loadArea("fredericton"); await sleep(2300);
+  const x6 = app.fireState(), v6 = vis();
+  record("X6 area switch clears fire", !x6.on && x6.boxHidden && x6.cardText === "" && FIRE.every((l) => v6[l] === "none"),
+         { x6, v6 });
+}
+
 async function main() {
   const q = new URLSearchParams(location.search);
   if (q.get("selftest") === "flood") return floodSuite();
+  if (q.get("selftest") === "fire") return fireSuite();
   if (q.get("road")) {                                               // 5. deep link -> Clear
     for (let i = 0; i < 100 && app.state().cardState !== "done"; i++) await sleep(200);
     const before = app.state();
