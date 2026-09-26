@@ -158,7 +158,7 @@ async function floodSuite() {
 async function fireSuite() {
   const waitDone = async () => { for (let i = 0; i < 150 && app.fireState().cardState !== "done"; i++) await sleep(200); };
   const vis = () => JSON.parse(app.snapshot()).vis;
-  const FIRE = ["fi-zone", "fi-zone-line", "fi-cut", "fi-roads"], SCAN = ["choke", "blocked", "cut"];
+  const FIRE = ["fi-zone", "fi-zone-line", "fi-cut", "fi-roads"], SCAN = ["choke", "blocked", "blocked-hatch", "blocked-edge", "cut"];
   const C = [-63.854, 44.7052];
   await app.loadArea("fredericton");
   record("X1 fire control only on Tantallon", app.fireState().boxHidden, app.fireState());
@@ -241,11 +241,56 @@ async function viewSuite() {
   app.unflood();
 }
 
+async function demoSuite() {
+  // the rehearsed demo flow: Westwood (nid 99) must show the frozen result and keep it through source switch,
+  // 2D/3D and Reset view; the exact mitigation proposal must show the audited per-source numbers
+  const FROZEN_CHOKE = [-63.878859695, 44.725371840];
+  const panelOk = (t) => t.includes("751 mapped buildings in this neighbourhood") && t.includes("OSM 751 · Microsoft 680") &&
+    t.includes("234 lose access if the worst sampled blockage occurs") && t.includes("OSM 234 · Microsoft 194") &&
+    t.includes("2 connections to major roads");
+  const snap = () => JSON.parse(app.snapshot());
+  await app.loadArea("tantallon");
+  app.select(99); await sleep(1500);
+  const s0 = snap(), ch = app.selectedChoke();
+  const chokeOk = ch && Math.abs(ch[0] - FROZEN_CHOKE[0]) < 1e-6 && Math.abs(ch[1] - FROZEN_CHOKE[1]) < 1e-6;
+  record("D1 Westwood nid 99: 751/680 cohort, 234/194 lose access, 2 connections, frozen choke, disc filtered to 99",
+    s0.selected === 99 && panelOk(s0.panelText) && chokeOk && JSON.stringify(app.blockedFilter()) === JSON.stringify(["==", ["get", "nid"], 99]),
+    { selected: s0.selected, choke: ch, panel: s0.panelText.slice(0, 260) });
+  let calls0 = apiCalls;
+  const msBtn = document.querySelector('#bldInfo button[data-src="ms"]');
+  msBtn && msBtn.click(); await sleep(1500);
+  const s1 = snap();
+  record("D2 footprint source OSM -> Microsoft keeps nid 99 and the same headline result",
+    !!msBtn && s1.selected === 99 && s1.bldPinned === "ms" && s1.panelText === s0.panelText,
+    { pinned: s1.bldPinned, requests: apiCalls - calls0, same: s1.panelText === s0.panelText });
+  const osmBtn = document.querySelector('#bldInfo button[data-src="osm"]');
+  osmBtn && osmBtn.click(); await sleep(1500);
+  calls0 = apiCalls;
+  app.view("3d", false); await sleep(500); const s3 = snap();
+  app.view("2d", false); await sleep(500); const s2 = snap();
+  record("D3 2D -> 3D -> 2D keeps nid 99, the same blockage and analytics, no requests",
+    apiCalls === calls0 && [s3, s2].every((s) => s.selected === 99 && s.panelText === s0.panelText &&
+      JSON.stringify(s.filters) === JSON.stringify(s0.filters)), { requests: apiCalls - calls0 });
+  calls0 = apiCalls;
+  document.getElementById("resetView").click(); await sleep(600);
+  const s4 = snap();
+  record("D4 Reset view changes only the camera: nid 99 and its result stay, no requests",
+    apiCalls === calls0 && s4.selected === 99 && s4.panelText === s0.panelText, { requests: apiCalls - calls0 });
+  await app.propose([-63.87399, 44.72806], [-63.85501, 44.70479]);
+  const m = app.state().cardText;
+  record("D5 exact Westwood proposal: 234/194 before, 1/1 same blockage, 233/193 regain, 53/35 residual, 2,992 m",
+    m.includes("233 of 234 regain access") && m.includes("OSM 234 · Microsoft 194") && m.includes("OSM 1 · Microsoft 1") &&
+    m.includes("OSM 233 · Microsoft 193") && m.includes("OSM 53 · Microsoft 35") && m.includes("2,992 m") &&
+    m.includes("Construction feasibility not assessed"), { card: m.slice(0, 400) });
+  app.clear();
+}
+
 async function main() {
   const q = new URLSearchParams(location.search);
   if (q.get("selftest") === "flood") return floodSuite();
   if (q.get("selftest") === "fire") return fireSuite();
   if (q.get("selftest") === "3d") return viewSuite();
+  if (q.get("selftest") === "demo") return demoSuite();
   if (q.get("road")) {                                               // 5. deep link -> Clear
     for (let i = 0; i < 100 && app.state().cardState !== "done"; i++) await sleep(200);
     const before = app.state();

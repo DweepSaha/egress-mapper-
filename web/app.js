@@ -75,18 +75,40 @@ map.setLight({ anchor: "viewport", color: "#ffffff", intensity: 0.6, position: [
 const SEL = ["boolean", ["feature-state", "selected"], false];
 map.addLayer({ id: "streets", type: "line", source: "streets", layout: { "line-cap": "round", "line-join": "round" },
   paint: {
-    "line-color": ["match", ["get", "status"], "red", COLORS.red, "amber", COLORS.amber, "green", COLORS.green, COLORS.not_assessed],
+    "line-color": ["case", SEL, "#7d5250",   // selected: muted; its stranded streets are drawn bright red on top (cut)
+      ["match", ["get", "status"], "red", COLORS.red, "amber", COLORS.amber, "green", COLORS.green, COLORS.not_assessed]],
     "line-width": ["interpolate", ["linear"], ["zoom"], 11, ["case", SEL, 2.2, 1.0], 16, ["case", SEL, 5, 2.6]],
     // red streets more opaque where more buildings could be cut off; classification itself is unchanged
     "line-opacity": ["case", SEL, 1, ["match", ["get", "status"],
       "red", ["interpolate", ["linear"], ["get", "worst_cut"], 30, 0.6, 200, 0.95], "not_assessed", 0.55, 0.85]] } });
 map.addLayer({ id: "cut", type: "line", source: "cut", filter: ["==", ["get", "nid"], -1],
-  paint: { "line-color": "#ff3b30", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 5] } });
+  layout: { "line-cap": "round", "line-join": "round" },
+  paint: { "line-color": "#ff3b30", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2.5, 16, 6.5] } });
+// Selected worst sampled blockage = the engine's own 50 m-radius disc from the scan response (no geometry computed here).
+// Drawn above the road layers: a dark gap so the road portions inside it read as unavailable, a hatch that marks the
+// area as blocked, and a dashed boundary. Buildings (2D and 3D) are drawn below, so they never hide it.
+{
+  const n = 16, px = new Uint8Array(n * n * 4);                    // diagonal hatch tile, generated locally (offline)
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const on = (x + y) % 8 < 2, i = (y * n + x) * 4;
+    px[i] = px[i + 1] = px[i + 2] = 255; px[i + 3] = on ? 150 : 0;
+  }
+  map.addImage("hatch", { width: n, height: n, data: px });
+}
 map.addLayer({ id: "blocked", type: "fill", source: "blocked", filter: ["==", ["get", "nid"], -1],
-  paint: { "fill-color": "#ffffff", "fill-opacity": 0.35 } });
+  paint: { "fill-color": "#07090c", "fill-opacity": 0.82 } });
+map.addLayer({ id: "blocked-hatch", type: "fill", source: "blocked", filter: ["==", ["get", "nid"], -1],
+  paint: { "fill-pattern": "hatch", "fill-opacity": 0.55 } });
+map.addLayer({ id: "blocked-edge", type: "line", source: "blocked", filter: ["==", ["get", "nid"], -1],
+  paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 12, 2.5, 16, 4],
+           "line-dasharray": [2, 1.2] } });
+// choke markers: the top-ranked ones stay as entry points; the selected one shrinks to a centre dot inside its disc
+const CHOKE_R = (sel) => ["interpolate", ["linear"], ["zoom"], 11, ["case", sel, 2, 4], 16, ["case", sel, 3.5, 9]];
 map.addLayer({ id: "choke", type: "circle", source: "choke", paint: {
   "circle-color": "#ffffff", "circle-stroke-color": "#ff3b30", "circle-stroke-width": 2,
-  "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 4, 16, 9] } });
+  "circle-radius": CHOKE_R(false) } });
+const BLOCKED_LAYERS = ["blocked", "blocked-hatch", "blocked-edge"];
+const setBlockedFilter = (nid) => BLOCKED_LAYERS.forEach((l) => map.setFilter(l, ["==", ["get", "nid"], nid]));
 
 // mitigation test layers: proposed road, and the neighbourhood's new worst case with that road
 map.addSource("proposal", { type: "geojson", data: empty });
@@ -114,7 +136,7 @@ map.addLayer({ id: "fl-cut", type: "line", source: "fl-cut", layout: { visibilit
 map.addLayer({ id: "fl-roads", type: "line", source: "fl-roads", layout: { visibility: "none", "line-cap": "round" },
   paint: { "line-color": "#22d3ee", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 6] } });
 const FLOOD_LAYERS = ["fl-cover", "fl-water", "fl-water-line", "fl-cut", "fl-roads"];
-const SCAN_OVERLAYS = ["choke", "blocked", "cut"];   // hidden while the flood scenario is shown, restored after
+const SCAN_OVERLAYS = ["choke", "blocked", "blocked-hatch", "blocked-edge", "cut"];   // hidden in scenario modes, restored after
 const STREET_OPACITY = map.getPaintProperty("streets", "line-opacity");
 // fire scenario layers (Tantallon only; hidden unless the fire scenario is active)
 for (const s of ["fi-zone", "fi-roads", "fi-cut"]) map.addSource(s, { type: "geojson", data: empty });
@@ -203,8 +225,11 @@ function panelHtml(p) {
       ${affected}
       ${metric(N(p.gateways), `connection${p.gateways === 1 ? "" : "s"} to major roads`)}
     </div>
-    ${!na && p.worst_cut > 0 ? `<div class="note">If this road area is blocked (white circle on the map), streets shown in
-      bright red lose their way out to a major road. This is the worst of the sampled blockages, not an absolute worst case.</div>` : ""}
+    ${!na && p.worst_cut > 0 ? `<div class="causal">
+      <div><span class="sw blk"></span><span><b>Blocked road area</b> (hatched circle, 100 m across): roads inside it are unavailable</span></div>
+      <div><span class="sw rd"></span><span><b>Streets in bright red</b> lose their way out: every route to a major road passes through it</span></div>
+      <div><span class="sw bo"></span><span><b>Orange mapped buildings</b> on those streets lose access; teal ones keep it</span></div>
+      <div class="fine">The worst of the sampled blockages, not an absolute worst case.</div></div>` : ""}
     ${srcBars(p.homes_osm, p.homes_ms, "Mapped buildings: source comparison")}`;
 }
 
@@ -215,13 +240,14 @@ function select(nid) {
   selected = nid;
   const f = scanData.neighbourhoods.features.find((f) => f.id === nid);
   const panel = document.getElementById("panel");
-  if (!f) { panel.classList.add("hidden"); updateChokeFilter(); syncMode(); return; }
+  if (!f) { panel.classList.add("hidden"); map.setPaintProperty("streets", "line-opacity", STREET_OPACITY); updateChokeFilter(); syncMode(); return; }
   map.setFeatureState({ source: "streets", id: nid }, { selected: true });
+  map.setPaintProperty("streets", "line-opacity", ["case", SEL, 0.95, 0.3]);   // other streets recede while selected
   panel.className = `card ${f.properties.status}`;
   panel.innerHTML = panelHtml(f.properties) + `<div id="bldInfo"></div>`;
   showBuildings(nid, f.properties);
   map.setFilter("cut", ["==", ["get", "nid"], nid]);
-  map.setFilter("blocked", ["==", ["get", "nid"], nid]);
+  setBlockedFilter(nid);
   updateChokeFilter();
   const b = new maplibregl.LngLatBounds();
   const add = (c) => (typeof c[0] === "number" ? b.extend(c) : c.forEach(add));
@@ -303,6 +329,7 @@ function updateChokeFilter() {
   // only the top-ranked choke points (and the selected one) are drawn, to avoid a wall of markers
   map.setFilter("choke", ["any", ["all", ["!=", ["get", "rank"], null], ["<=", ["get", "rank"], SHOW_TOP_CHOKES]],
                           ["==", ["get", "nid"], selected ?? -1]]);
+  map.setPaintProperty("choke", "circle-radius", CHOKE_R(["==", ["get", "nid"], selected ?? -1]));
 }
 
 function renderOverview() {
@@ -365,9 +392,10 @@ async function loadArea(name) {
   map.getSource("blocked").setData(scan.blocked);
   map.getSource("choke").setData(scan.chokepoints);
   selected = null;
+  map.setPaintProperty("streets", "line-opacity", STREET_OPACITY);
   document.getElementById("panel").classList.add("hidden");
   map.setFilter("cut", ["==", ["get", "nid"], -1]);
-  map.setFilter("blocked", ["==", ["get", "nid"], -1]);
+  setBlockedFilter(-1);
   updateChokeFilter();
   renderOverview();
   renderSummary();
@@ -928,6 +956,11 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
     enterFire(mode);
   },
   unfire: () => exitFire(),
+  selectedChoke() {   // the selected neighbourhood's choke point, as served by the scan (test/diagnostic only)
+    const f = scanData && scanData.chokepoints.features.find((c) => c.properties.nid === selected);
+    return f ? f.geometry.coordinates : null;
+  },
+  blockedFilter: () => map.getFilter("blocked"),
   view: (v, animate = true) => setView(v, animate), viewState: () => ({ view, pitch: map.getPitch(), bearing: map.getBearing(),
     vis3d: map.getLayoutProperty("bld-3d", "visibility"), vis2d: map.getLayoutProperty("bld-fill", "visibility"),
     noteHidden: $("viewNote").classList.contains("hidden") }),
@@ -945,4 +978,4 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
              clearVisible: !document.getElementById("clearBtn").classList.contains("hidden") };
   },
 };
-if (["1", "flood", "fire", "3d"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only
+if (["1", "flood", "fire", "3d", "demo"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only
