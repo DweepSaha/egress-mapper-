@@ -57,6 +57,12 @@ map.addLayer({ id: "bld-fill", type: "fill", source: "bld", minzoom: 12,
 map.addLayer({ id: "bld-line", type: "line", source: "bld", minzoom: 14,
   paint: { "line-color": BLD_COLOR, "line-width": 0.6,
            "line-opacity": ["match", BLD_CAT, "cut", 1, "inside", 1, 0] } }, "roads");
+// 3D view (presentation only): the same polygons and category colours, extruded to one fixed illustrative height.
+// Placed below the road layers so roads, choke points, the proposed connection and hazard lines stay readable on top.
+const BLD_HEIGHT_M = 7;          // illustrative, identical for every mapped building (real heights are not available)
+map.addLayer({ id: "bld-3d", type: "fill-extrusion", source: "bld", minzoom: 12, layout: { visibility: "none" },
+  paint: { "fill-extrusion-color": BLD_COLOR, "fill-extrusion-height": BLD_HEIGHT_M, "fill-extrusion-base": 0,
+           "fill-extrusion-opacity": 0.88 } }, "roads");
 
 const SEL = ["boolean", ["feature-state", "selected"], false];
 map.addLayer({ id: "streets", type: "line", source: "streets", layout: { "line-cap": "round", "line-join": "round" },
@@ -210,7 +216,7 @@ function select(nid) {
   const b = new maplibregl.LngLatBounds();
   const add = (c) => (typeof c[0] === "number" ? b.extend(c) : c.forEach(add));
   add(f.geometry.coordinates);
-  map.fitBounds(b, { padding: 60, maxZoom: 16, duration: 900 });
+  map.fitBounds(b, { padding: 60, maxZoom: 16, duration: 900, bearing: map.getBearing() });   // keeps 2D/3D tilt
   syncMode();
 }
 
@@ -787,7 +793,23 @@ document.querySelectorAll("#modes button").forEach((b) => (b.onclick = () => {
   else if (m === "fire") { if (floodOn) exitFlood(false); if (!fireOn) enterFire(); }
 }));
 $("resetView").onclick = () => current && map.flyTo({ center: areas[current].center, zoom: areas[current].zoom,
-                                                        pitch: 0, bearing: 0, duration: 800 });
+                                                        pitch: view === "3d" ? PITCH_3D : 0, bearing: 0, duration: 800 });
+
+// ---------- 2D / 3D: two views of the SAME current result. Only the camera and the building layer change: no request,
+// no recalculation, and no change to scenario, selection, source, proposed connection or parameters.
+const PITCH_3D = 55;
+let view = "2d";
+function setView(v, animate = true) {
+  view = v === "3d" ? "3d" : "2d";
+  const is3d = view === "3d";
+  map.setLayoutProperty("bld-3d", "visibility", is3d ? "visible" : "none");
+  ["bld-fill", "bld-line"].forEach((l) => map.setLayoutProperty(l, "visibility", is3d ? "none" : "visible"));
+  const cam = { pitch: is3d ? PITCH_3D : 0, ...(is3d ? {} : { bearing: 0 }) };
+  if (animate) map.easeTo({ ...cam, duration: 900 }); else map.jumpTo(cam);
+  document.querySelectorAll("#viewCtl button").forEach((b) => b.classList.toggle("on", b.dataset.view === view));
+  $("viewNote").classList.toggle("hidden", !is3d);
+}
+document.querySelectorAll("#viewCtl button").forEach((b) => (b.onclick = () => setView(b.dataset.view)));
 document.querySelectorAll("#fireModes button").forEach((b) => (b.onclick = () => fireOn && setFireMode(b.dataset.mode)));
 $("fireRadius").oninput = (e) => ($("fireRadiusVal").textContent = `${(+e.target.value).toLocaleString()} m`);
 $("fireRadius").onchange = () => fireOn && fireMode === "hyp" && runFire();   // on release
@@ -806,6 +828,7 @@ map.on("mouseleave", "nb-fill", () => (map.getCanvas().style.cursor = ""));
 // deep links: ?area=fredericton&nid=99 opens an area with a neighbourhood selected
 const q = new URLSearchParams(location.search);
 await loadArea(areas[q.get("area")] ? q.get("area") : "tantallon");
+if (q.get("view") === "3d") setView("3d", false);   // before &nid: an instant camera change would cancel its zoom
 if (q.get("nid")) select(+q.get("nid"));
 // scripted demo / backup: &road=lonA,latA,lonB,latB runs the same mitigation path as two map clicks
 if (q.get("road")) {
@@ -860,6 +883,9 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
     enterFire(mode);
   },
   unfire: () => exitFire(),
+  view: (v, animate = true) => setView(v, animate), viewState: () => ({ view, pitch: map.getPitch(), bearing: map.getBearing(),
+    vis3d: map.getLayoutProperty("bld-3d", "visibility"), vis2d: map.getLayoutProperty("bld-fill", "visibility"),
+    noteHidden: $("viewNote").classList.contains("hidden") }),
   fireState: () => ({ on: fireOn, mode: fireMode, area: current, cardState: $("fireOut").dataset.state || null,
     cardText: $("fireOut").textContent.replace(/\s+/g, " ").trim(), bldStates: bldStateN,
     boxHidden: document.querySelector('#modes [data-mode="fire"]').classList.contains("hidden") }),
@@ -874,4 +900,4 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
              clearVisible: !document.getElementById("clearBtn").classList.contains("hidden") };
   },
 };
-if (["1", "flood", "fire"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only
+if (["1", "flood", "fire", "3d"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only

@@ -12,7 +12,9 @@ const floodDelays = [];   // delays (ms) applied, in order, to /flood?gauge= res
 const infoDelays = [];    // ... to /flood/info responses
 const bldDelays = [];     // ... to /buildings/ footprint responses
 const fireDelays = [];    // ... to /fire/ scenario responses
+let apiCalls = 0;         // every /api/ request (the 3D suite asserts that toggling 2D/3D makes none)
 window.fetch = async (url, opts) => {
+  if (String(url).includes("/api/")) apiCalls++;
   for (const [needle, q] of [["/flood/info", infoDelays], ["/buildings/", bldDelays]]) {
     if (String(url).includes(needle)) {
       const d = q.length ? q.shift() : 0;
@@ -201,10 +203,49 @@ async function fireSuite() {
          { x6, v6 });
 }
 
+async function viewSuite() {
+  // 2D and 3D are two views of the same result: toggling must not request, recalculate or change any state
+  const W3 = [[-63.87399, 44.72806], [-63.85501, 44.70479]];
+  const until = async (ok) => { for (let i = 0; i < 150 && !ok(); i++) await sleep(200); };
+  const state = () => {
+    const snap = JSON.parse(app.snapshot()), m = app.state(), f = app.fireState(), fl = app.floodState();
+    return { selected: snap.selected, panel: snap.panelText, bldSrc: snap.bldSrc, bldPinned: snap.bldPinned,
+             mitig: m.cardText, proposal: m.proposalFeatures, fire: f.cardText, fireMode: f.mode, fireOn: f.on,
+             flood: fl.cardText, floodOn: fl.on, gauge: app.gaugeValue(), bldStates: snap.bldStates,
+             overlays: Object.fromEntries(Object.entries(snap.vis).filter(([k]) => !k.startsWith("bld"))) };
+  };
+  async function roundTrip(name) {
+    const before = state(), calls0 = apiCalls;
+    app.view("3d", false); await sleep(600);   // instant: headless Edge does not advance camera animations
+    const v3 = app.viewState(), mid = state();
+    app.view("2d", false); await sleep(600);
+    const v2 = app.viewState(), after = state();
+    const same = JSON.stringify(before) === JSON.stringify(mid) && JSON.stringify(before) === JSON.stringify(after);
+    record(`V ${name}: 2D -> 3D -> 2D keeps state, no requests`,
+      same && apiCalls === calls0 && Math.abs(v3.pitch - 55) < 0.5 && v3.vis3d === "visible" && v3.vis2d === "none" &&
+      !v3.noteHidden && v2.pitch === 0 && v2.vis3d === "none" && v2.vis2d === "visible" && v2.noteHidden,
+      { requests: apiCalls - calls0, v3, v2, diff: same ? null : { before, mid, after } });
+  }
+  await app.loadArea("tantallon");
+  app.select(99); await sleep(1500);
+  await roundTrip("vulnerability (Westwood selected)");
+  await app.propose(...W3);
+  await roundTrip("mitigation (exact Westwood proposal)");
+  app.clear();
+  app.fire("hist"); await until(() => app.fireState().cardState === "done");
+  await roundTrip("historical fire");
+  app.unfire();
+  await app.loadArea("fredericton");
+  await app.flood(8.36); await until(() => app.floodState().cardState === "done");
+  await roundTrip("flood 8.36");
+  app.unflood();
+}
+
 async function main() {
   const q = new URLSearchParams(location.search);
   if (q.get("selftest") === "flood") return floodSuite();
   if (q.get("selftest") === "fire") return fireSuite();
+  if (q.get("selftest") === "3d") return viewSuite();
   if (q.get("road")) {                                               // 5. deep link -> Clear
     for (let i = 0; i < 100 && app.state().cardState !== "done"; i++) await sleep(200);
     const before = app.state();
