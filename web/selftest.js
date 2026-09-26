@@ -239,7 +239,7 @@ async function viewSuite() {
   await app.loadArea("tantallon");
   app.select(99); await sleep(1500);
   await roundTrip("vulnerability (Westwood selected)");
-  await app.propose(...W3);
+  await app.propose(...W3); await sleep(600);          // let any headline settle (motion on) before the snapshot
   await roundTrip("mitigation (exact Westwood proposal)");
   app.clear();
   app.fire("hist"); await until(() => app.fireState().cardState === "done");
@@ -425,6 +425,51 @@ async function probeSuite() {
   app.unflood();
 }
 
+async function motionSuite() {
+  // motion is presentation only: state is final before any animation; newer results cancel older counts
+  const OTHER = [-63.88573, 44.73359], WORST = [-63.878859695, 44.725371840], W = [[-63.87399, 44.72806], [-63.85501, 44.70479]];
+  const P = () => app.probeInfo();
+  await app.loadArea("tantallon"); app.select(99); await sleep(1500);
+  await app.probeDrop(...OTHER);
+  const stateNow = P(), textNow = app.settleText("probe-cut"), ringNow = app.attnRings();
+  await sleep(1000);
+  const textLater = app.settleText("probe-cut"), final = stateNow.cut && Math.max(...stateNow.cut).toLocaleString();
+  record("M1 placed blockage: state is final at once; the headline settles 234 -> final; one ring then none",
+    stateNow.shown && textNow === "234" && textLater === final && ringNow === 1 && app.attnRings() === 0,
+    { textNow, textLater, final, ringNow, ringsAfter: app.attnRings() });
+  const pA = app.probeDrop(...OTHER); const pB = app.probeDrop(...WORST);
+  await Promise.all([pA, pB]); await sleep(700);
+  record("M2 a newer result cancels the older count: the headline ends on the newest value (234)",
+    app.settleText("probe-cut") === "234" && P().cut[0] === 234, { text: app.settleText("probe-cut") });
+  app.probeReset();
+  await app.propose(...W);
+  const mNow = app.state().cardText, afterNow = app.settleText("mit-after");
+  await sleep(700);
+  record("M3 mitigation: card state final at once (233 of 234); AFTER headline settles 234 -> 1",
+    mNow.includes("233 of 234") && afterNow === "234" && app.settleText("mit-after") === "1", { afterNow, after: app.settleText("mit-after") });
+  app.clear();
+  app.motion(false);
+  app.select(99); await sleep(300);
+  await app.probeDrop(...OTHER);
+  record("M4 motion off: headline shows the final value immediately, no ring",
+    app.settleText("probe-cut") === Math.max(...P().cut).toLocaleString() && app.attnRings() === 0, { text: app.settleText("probe-cut") });
+  app.probeReset(); app.motion(true);
+  const l1 = app.loadArea("fredericton"), l2 = app.loadArea("tantallon"), l3 = app.loadArea("fredericton");
+  await Promise.all([l1, l2, l3]); await sleep(1200);
+  const snapA = JSON.parse(app.snapshot());
+  record("M5 rapid area switching: the last requested area wins, nothing selected, no ring",
+    app.state().area === "fredericton" && snapA.selected === null && app.attnRings() === 0 &&
+    document.getElementById("ctxArea").textContent === "Fredericton, NB", { area: app.state().area });
+  await app.loadArea("tantallon"); app.select(99);
+  app.probeReset(); app.clear();                          // during the camera transition
+  app.view("3d"); app.view("2d");                          // intentional transitions, immediately superseded
+  await sleep(1400);
+  const snapB = JSON.parse(app.snapshot()), vs = app.viewState();
+  record("M6 Reset / Clear / 2D-3D during transitions: selection and result intact, final view is 2D",
+    snapB.selected === 99 && snapB.panelText.includes("234 lose access") && vs.view === "2d" && vs.vis2d === "visible" &&
+    vs.vis3d === "none" && !P().shown, { view: vs, selected: snapB.selected });
+}
+
 async function main() {
   const q = new URLSearchParams(location.search);
   if (q.get("selftest") === "flood") return floodSuite();
@@ -432,6 +477,7 @@ async function main() {
   if (q.get("selftest") === "3d") return viewSuite();
   if (q.get("selftest") === "demo") return demoSuite();
   if (q.get("selftest") === "probe") return probeSuite();
+  if (q.get("selftest") === "motion") return motionSuite();
   if (q.get("road")) {                                               // 5. deep link -> Clear
     for (let i = 0; i < 100 && app.state().cardState !== "done"; i++) await sleep(200);
     const before = app.state();

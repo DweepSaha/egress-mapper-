@@ -261,3 +261,9 @@ details.method p { margin: 6px 0; }
 #blkBadge { font-size: 11.5px; color: var(--fg); background: rgba(13, 17, 22, .92); border: 1px solid #555;
             border-radius: 5px; padding: 3px 9px; white-space: nowrap; }
 #blkBadge.probe-on { border-color: #7fdcff; color: #bfefff; }
+
+/* one-shot attention ring (motion only; removed on animationend) */
+.attn-ring { width: 36px; height: 36px; border-radius: 50%; border: 3px solid #fff; pointer-events: none;
+             animation: attn 650ms ease-out forwards; }
+@keyframes attn { from { transform: scale(.6); opacity: .9; } to { transform: scale(3.2); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .attn-ring { display: none; } }

@@ -5,6 +5,12 @@ const OFM_DARK = "https://tiles.openfreemap.org/styles/dark";
 const OFFLINE_STYLE = { version: 8, sources: {},
   layers: [{ id: "bg", type: "background", paint: { "background-color": "#0b0d10" } }] };
 const COLORS = { red: "#e0524a", amber: "#e0a526", green: "#3fb27f", not_assessed: "#6b7280" };
+// Motion only acknowledges USER input (camera framing, settling headline numbers, one attention ring). Off for
+// prefers-reduced-motion, ?motion=off, self-tests (unless &motion=on) or __app.motion(false). Never drives state.
+const QS = new URLSearchParams(location.search);
+let MOTION = QS.get("motion") === "on" ||
+  (QS.get("motion") !== "off" && !QS.get("selftest") && !matchMedia("(prefers-reduced-motion: reduce)").matches);
+const dur = (ms) => (MOTION ? ms : 0);
 const SHOW_TOP_CHOKES = 5;
 
 async function pickStyle() {
@@ -205,8 +211,8 @@ function bldProcessed(ns, gen) {
 const N = (v) => (v === null || v === undefined ? "—" : Number(v).toLocaleString());
 const pairTxt = (o, m) => `OSM ${N(o)} · Microsoft ${N(m)}`;
 const INDEP = `<div class="indep">OpenStreetMap and Microsoft are independent footprint estimates, never added together.</div>`;
-const metric = (v, label, cls = "", sub = "") => `<div class="m ${cls}">
-  <div class="mv">${v}</div>
+const metric = (v, label, cls = "", sub = "", s = null) => `<div class="m ${cls}">
+  <div class="mv"${s ? ` data-k="${s.k}" data-v="${s.v}" data-d="${s.d || 0}" data-u="${s.u || ""}"` : ""}>${v}</div>
   <div class="ml">${label}</div>${sub ? `
   <div class="msub">${sub}</div>` : ""}</div>`;
 // two independent estimates side by side, each bar scaled to the larger of the two (never summed)
@@ -238,7 +244,7 @@ function panelHtml(p) {
   const affected = na
     ? metric("—", "affected: not assessed", "na")
     : metric(N(p.worst_cut), "lose access if the worst sampled blockage occurs", p.worst_cut > 0 ? "cut" : "",
-             pairTxt(p.worst_cut_osm, p.worst_cut_ms));
+             pairTxt(p.worst_cut_osm, p.worst_cut_ms), { k: "nb-cut", v: p.worst_cut });
   return `<div class="kicker">Access vulnerability</div>
     <div class="stag ${p.status}"><b>${STATUS_TAG[p.status]}</b> ${STATUS_TXT[p.status]}</div>
     <div class="mgrid3">
@@ -268,6 +274,7 @@ function select(nid) {
   map.setPaintProperty("streets", "line-opacity", ["case", SEL, 0.95, 0.3]);   // other streets recede while selected
   panel.className = `card ${f.properties.status}`;
   panel.innerHTML = panelHtml(f.properties) + `<div id="bldInfo"></div>`;
+  settleIn(panel);
   showBuildings(nid, f.properties);
   map.setFilter("cut", ["==", ["get", "nid"], nid]);
   setBlockedFilter(nid);
@@ -276,8 +283,10 @@ function select(nid) {
   const b = new maplibregl.LngLatBounds();
   const add = (c) => (typeof c[0] === "number" ? b.extend(c) : c.forEach(add));
   add(f.geometry.coordinates);
-  if (view === "3d") frame3d(nid, 900);
-  else map.fitBounds(b, { padding: 60, maxZoom: 16, duration: 900, bearing: map.getBearing() });
+  if (view === "3d") frame3d(nid, dur(800));
+  else map.fitBounds(b, { padding: 60, maxZoom: 16, duration: dur(800), bearing: map.getBearing() });
+  const ch = scanData.chokepoints.features.find((x) => x.properties.nid === nid);
+  if (ch) attentionAfterMove(ch.geometry.coordinates);   // one ring once the camera has arrived
   syncMode();
 }
 
@@ -427,7 +436,10 @@ async function loadArea(name) {
   renderOverview();
   renderSummary();
   syncMode();
-  map.jumpTo({ center: areas[name].center, zoom: areas[name].zoom });
+  for (const k in shownNum) delete shownNum[k];          // numbers never "settle" across areas
+  attention(null);                                       // no ring carried across areas
+  if (firstFrame) { firstFrame = false; map.jumpTo({ center: areas[name].center, zoom: areas[name].zoom }); }
+  else map.flyTo({ center: areas[name].center, zoom: areas[name].zoom, duration: dur(900) });
 }
 
 document.getElementById("areas").innerHTML = Object.entries(areas)
@@ -487,7 +499,7 @@ function mitigHtml(r) {
       <div class="bacol">${metric(N(b.worst_cut), "BEFORE: lose access under this blockage", "cut", pairTxt(r.before_cut_src.osm, r.before_cut_src.ms))}</div>
       <div class="baarrow">→</div>
       <div class="bacol">${metric(N(r.same_block_cut), "AFTER: remain without access under this blockage", r.same_block_cut > 0 ? "cut" : "retain",
-                                  pairTxt(r.same_block_cut_src.osm, r.same_block_cut_src.ms))}</div>
+                                  pairTxt(r.same_block_cut_src.osm, r.same_block_cut_src.ms), { k: "mit-after", v: r.same_block_cut })}</div>
     </div>
     <div class="babars">
       <div class="dsrc"><span>Before</span><div class="dist"><i class="cut" style="width:100%"></i></div></div>
@@ -526,6 +538,7 @@ async function runMitigation() {
   }
   if (!stillCurrent()) return;   // superseded by Clear, an area switch or a newer proposal: touch nothing
   box.innerHTML = mitigHtml(r);
+  if (r.ok && !r.unavailable) settleIn(box, { "mit-after": r.before.worst_cut });   // e.g. 234 -> 1
   box.scrollIntoView({ block: "nearest" });
   box.dataset.state = r.ok ? "done" : "error";   // used by the scripted checks
   if (!r.ok) { setProposal(pair.map(pt)); return; }
@@ -568,8 +581,9 @@ function floodHtml(s) {
     <div class="mgrid2">
       ${metric(`${s.gauge_m.toFixed(2)} m`, "supplied gauge level (CGVD28, station 01AK003)", "flood")}
       ${metric(`~${s.water_cgvd2013_m.toFixed(2)} m`, "project CGVD2013 conversion", "flood", `offset ${s.offset_m} m`)}
-      ${metric(`${s.roads_affected_km} km`, "road portions affected", "froad")}
-      ${metric(N(Math.max(c.lose_access.osm, c.lose_access.ms)), "outside the inundation, lose access", "cut", pairTxt(c.lose_access.osm, c.lose_access.ms))}
+      ${metric(`${s.roads_affected_km} km`, "road portions affected", "froad", "", { k: "fl-km", v: s.roads_affected_km, d: 2, u: " km" })}
+      ${metric(N(Math.max(c.lose_access.osm, c.lose_access.ms)), "outside the inundation, lose access", "cut", pairTxt(c.lose_access.osm, c.lose_access.ms),
+               { k: "fl-cut", v: Math.max(c.lose_access.osm, c.lose_access.ms) })}
     </div>
     ${distBlock("Mapped buildings by status", [
       { cls: "inside", label: "Centre inside supplied inundation", key: "inside" },
@@ -620,6 +634,7 @@ async function runFlood(g) {
   map.getSource("fl-roads").setData(s.roads_affected);
   map.getSource("fl-cut").setData(s.cut_roads);
   out.innerHTML = floodHtml(s) + `<div id="floodBld"></div>`;
+  settleIn(out);
   out.dataset.state = "done";
   const src = bldPinned || (s.counts.lose_access.ms > s.counts.lose_access.osm ? "ms" : "osm");
   if (bldShown.src !== src) await loadBuildings(current, src); else applyBuildingCats();
@@ -676,6 +691,7 @@ function exitFlood(restoreSelection = true) {
   $("floodCtl").classList.add("hidden");
   syncMode();
   $("floodOut").innerHTML = ""; delete $("floodOut").dataset.state;
+  delete shownNum["fl-km"]; delete shownNum["fl-cut"];
   const saved = floodSavedBld; floodSavedBld = null;
   if (restoreSelection && saved) {               // restore the pre-flood footprint source and the viewer's pin
     bldPinned = saved.pinned;
@@ -707,12 +723,12 @@ function fireHtml(s) {
     ? `<div class="kicker">2023 mapped burned-area perimeter</div><div class="big">Mapped 2023 fire perimeter</div>
        <div class="mgrid2">
          ${metric(`${s.perimeter.mapped_ha} ha`, "published NBAC area", "fire", `fire starting ${s.perimeter.start_date}`)}
-         ${metric(`${s.roads_affected_km} km`, "road portions within the mapped area", "froad-f")}
+         ${metric(`${s.roads_affected_km} km`, "road portions within the mapped area", "froad-f", "", { k: "fi-km", v: s.roads_affected_km, d: 2, u: " km" })}
        </div>`
     : `<div class="kicker">Supplied affected area</div><div class="big">Supplied hypothetical affected area</div>
        <div class="mgrid2">
          ${metric(`${s.radius_m.toLocaleString()} m`, "supplied affected radius", "fire", `${s.zone_ha} ha · your input, not a predicted fire extent`)}
-         ${metric(`${s.roads_affected_km} km`, "road portions within the supplied affected area", "froad-f")}
+         ${metric(`${s.roads_affected_km} km`, "road portions within the supplied affected area", "froad-f", "", { k: "fi-km", v: s.roads_affected_km, d: 2, u: " km" })}
        </div>`;
   const ents = hist
     ? `<div class="fnote">Neither Westwood Hills entrance lies inside the mapped perimeter (about
@@ -771,6 +787,7 @@ async function runFire() {
   map.getSource("fi-roads").setData(s.roads_affected);
   map.getSource("fi-cut").setData(s.cut_roads);
   out.innerHTML = fireHtml(s) + `<div id="fireBld"></div>`;
+  settleIn(out);
   out.dataset.state = "done";
   syncMode();
   const src = bldPinned || (s.counts.lose_access.ms > s.counts.lose_access.osm ? "ms" : "osm");
@@ -820,6 +837,7 @@ function exitFire(restoreSelection = true) {
   $("fireCtl").classList.add("hidden");
   syncMode();
   $("fireOut").innerHTML = ""; delete $("fireOut").dataset.state;
+  delete shownNum["fi-km"];
   const saved = fireSavedBld; fireSavedBld = null;
   if (restoreSelection && saved) {
     bldPinned = saved.pinned;
@@ -830,6 +848,53 @@ function exitFire(restoreSelection = true) {
   if (restoreSelection && sel !== null) select(sel);
 }
 
+
+// ---------- motion helpers (presentation only) ----------
+// Headline settling: the element already contains the FINAL text; if motion is on and a previous value for the same
+// headline is known, the text counts from it to the final value over ~380 ms. A newer render of the same headline
+// (or removal of the element) cancels the older count immediately; a timer guarantees the final text even if frames stall.
+const shownNum = {}, settleTok = {};
+let firstFrame = true;
+function settleIn(root, seeds = {}) {
+  root.querySelectorAll(".mv[data-k]").forEach((el) => {
+    const k = el.dataset.k, to = +el.dataset.v, dec = +el.dataset.d || 0, unit = el.dataset.u || "";
+    const from = k in seeds ? seeds[k] : shownNum[k];
+    shownNum[k] = to;
+    const tok = (settleTok[k] = (settleTok[k] || 0) + 1);
+    if (!MOTION || from === undefined || from === null || !Number.isFinite(from) || from === to) return;
+    const fmt = (v) => (dec ? v.toFixed(dec) : Math.round(v).toLocaleString()) + unit, final = el.textContent;
+    const t0 = performance.now(), D = 380;
+    const live = () => settleTok[k] === tok && el.isConnected;
+    const step = (now) => {
+      if (!live()) return;
+      const p = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = p < 1 ? fmt(from + (to - from) * e) : final;
+      if (p < 1) requestAnimationFrame(step);
+    };
+    el.textContent = fmt(from);
+    requestAnimationFrame(step);
+    setTimeout(() => { if (live()) el.textContent = final; }, D + 150);
+  });
+}
+// One-shot attention ring (~650 ms, CSS), lying on the ground plane; never repeats, never loops.
+let attnMarker = null, attnTok = 0;
+function attention(ll) {
+  attnTok++;
+  if (attnMarker) { attnMarker.remove(); attnMarker = null; }
+  if (!MOTION || !ll) return;
+  const el = document.createElement("div");
+  el.className = "attn-ring";
+  const m = new maplibregl.Marker({ element: el, pitchAlignment: "map", rotationAlignment: "map" }).setLngLat(ll).addTo(map);
+  attnMarker = m;
+  const done = () => { if (attnMarker === m) { m.remove(); attnMarker = null; } };
+  el.addEventListener("animationend", done, { once: true });
+  setTimeout(done, 750);                               // fallback if animationend never fires
+}
+function attentionAfterMove(ll) {   // after the camera arrives (moveend), unless something newer happened
+  const tok = ++attnTok;
+  if (!MOTION) return;
+  map.once("moveend", () => { if (tok === attnTok) attention(ll); });
+}
 
 // ---------- user-placed blockage (probe): drag the circle along the roads, release to test ----------
 // Drag = visual only (local snap preview, no request, no state change). Release = ONE request. Every drop, drag start,
@@ -913,7 +978,8 @@ function renderProbeCard() {
   else if (probeShown()) {
     const d = probe.data, c = d.counts;
     body = `<div class="mgrid2">
-        ${metric(N(d.cut), "mapped buildings lose access if this road area is blocked", d.cut > 0 ? "cut" : "retain", pairTxt(d.cut_osm, d.cut_ms))}
+        ${metric(N(d.cut), "mapped buildings lose access if this road area is blocked", d.cut > 0 ? "cut" : "retain", pairTxt(d.cut_osm, d.cut_ms),
+                 { k: "probe-cut", v: d.cut })}
         ${metric(N(Math.max(c.inside.osm, c.inside.ms)), "centre inside the blocked area", "inside", pairTxt(c.inside.osm, c.inside.ms))}
       </div>
       ${distBlock("Mapped buildings under the blockage you placed", [
@@ -926,6 +992,7 @@ function renderProbeCard() {
     ${probeMsg ? `<div class="pmsg">${probeMsg}</div>` : ""}${body}${worst}${reset}
     <div class="fine">Your test only: it does not change the scan, the ranking or the neighbourhood's classification.</div>`;
   $("probeReset").onclick = () => clearProbe();
+  if (probeState === "done" && probeShown()) settleIn(el, { "probe-cut": shownNum["probe-cut"] ?? p.worst_cut });   // e.g. 234 -> 47
 }
 function endDragListeners() {
   if (!drag) return;
@@ -939,6 +1006,7 @@ function clearProbe() {       // reset to the worst sampled blockage; invalidate
   setPreview(empty);          // always: also covers a pending calculation (no drag active)
   const had = probe !== null;
   probe = null; probeState = "none"; probeMsg = "";
+  delete shownNum["probe-cut"];
   if (!scanData) return;
   renderBlockage();
   if (had) applyBuildingCats();
@@ -1016,6 +1084,7 @@ async function runProbe(ll, previewAt) {          // ll = raw release point; pre
   if (!d.ok) { probeMsg = `${d.message} The blockage went back to where it was.`; probeState = probeShown() ? "done" : "rejected"; renderBlockage(); return; }
   probe = { area, nid, data: d }; probeState = "done";
   renderBlockage();
+  attention(d.centre);
   applyBuildingCats();
 }
 for (const l of ["blk-hit", "blocked", "probe-gap"]) {
@@ -1058,7 +1127,7 @@ document.querySelectorAll("#modes button").forEach((b) => (b.onclick = () => {
   else if (m === "fire") { if (floodOn) exitFlood(false); if (!fireOn) enterFire(); }
 }));
 $("resetView").onclick = () => current && map.flyTo({ center: areas[current].center, zoom: areas[current].zoom,
-                                                        pitch: view === "3d" ? PITCH_3D : 0, bearing: view === "3d" ? BEARING_3D : 0, duration: 800 });
+                                                        pitch: view === "3d" ? PITCH_3D : 0, bearing: view === "3d" ? BEARING_3D : 0, duration: dur(800) });
 
 // ---------- 2D / 3D: two views of the SAME current result. Only the camera and the building layer change: no request,
 // no recalculation, and no change to scenario, selection, source, proposed connection or parameters.
@@ -1095,10 +1164,10 @@ function setView(v, animate = true) {
   const is3d = view === "3d";
   map.setLayoutProperty("bld-3d", "visibility", is3d ? "visible" : "none");
   ["bld-fill", "bld-line"].forEach((l) => map.setLayoutProperty(l, "visibility", is3d ? "none" : "visible"));
-  const framed = selected !== null && (is3d ? frame3d(selected, animate ? 1200 : 0) : frame2d(selected, animate ? 900 : 0));
+  const framed = selected !== null && (is3d ? frame3d(selected, animate ? dur(900) : 0) : frame2d(selected, animate ? dur(800) : 0));
   if (!framed) {
     const cam = { pitch: is3d ? PITCH_3D : 0, bearing: is3d ? BEARING_3D : 0 };
-    if (animate) map.easeTo({ ...cam, duration: 900 }); else map.jumpTo(cam);
+    if (animate && MOTION) map.easeTo({ ...cam, duration: 800 }); else map.jumpTo(cam);
   }
   document.querySelectorAll("#viewCtl button").forEach((b) => b.classList.toggle("on", b.dataset.view === view));
   $("viewNote").classList.toggle("hidden", !is3d);
@@ -1177,6 +1246,17 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
     enterFire(mode);
   },
   unfire: () => exitFire(),
+  motion: (on) => { MOTION = !!on; if (!MOTION) attention(null); return MOTION; },
+  settleText: (k) => { const el = document.querySelector(`.mv[data-k="${k}"]`); return el ? el.textContent : null; },
+  attnRings: () => document.querySelectorAll(".attn-ring").length,
+  async fps(ms = 2000, orbit = true) {   // frames rendered during a slow camera orbit (performance check in Chrome)
+    let n = 0; const count = () => n++;
+    map.on("render", count);
+    if (orbit) map.easeTo({ bearing: map.getBearing() + 60, duration: ms, easing: (t) => t });
+    await new Promise((r) => setTimeout(r, ms));
+    map.off("render", count);
+    return Math.round((n * 1000) / ms);
+  },
   selectedChoke() {   // the selected neighbourhood's choke point, as served by the scan (test/diagnostic only)
     const f = scanData && scanData.chokepoints.features.find((c) => c.properties.nid === selected);
     return f ? f.geometry.coordinates : null;
@@ -1212,4 +1292,4 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
              clearVisible: !document.getElementById("clearBtn").classList.contains("hidden") };
   },
 };
-if (["1", "flood", "fire", "3d", "demo", "probe"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only
+if (["1", "flood", "fire", "3d", "demo", "probe", "motion"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only
