@@ -1,0 +1,83 @@
+:root { --bg: #0b0d10; --panel: rgba(16, 19, 24, .94); --fg: #dfe4ea; --muted: #8b95a1;
+        --red: #e0524a; --amber: #e0a526; --green: #3fb27f; --grey: #6b7280; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+             font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+html, body { overflow: hidden; }           /* the app shell is the viewport: the document itself never scrolls */
+#map { position: absolute; inset: 0; background: var(--bg); }
+/* self-test results (only created with ?selftest=...): a fixed overlay inside the viewport, never in the page flow */
+#selftest { position: fixed; right: 12px; bottom: 12px; width: min(460px, calc(100vw - 380px)); max-height: 45vh;
+            overflow: auto; z-index: 10; margin: 0; padding: 10px; border: 1px solid #f59e0b; border-radius: 8px;
+            background: rgba(20, 16, 8, .95); color: #fde68a; font: 11px/1.4 ui-monospace, Consolas, monospace;
+            white-space: pre-wrap; }
+#selftest::before { content: "SELF-TEST RESULTS (?selftest mode only)\A"; font-weight: 700; color: #f59e0b; }
+#side { position: absolute; top: 12px; left: 12px; bottom: 12px; width: 330px; overflow-y: auto; overflow-x: hidden;
+        overscroll-behavior: contain; max-width: calc(100vw - 24px); z-index: 2;
+        background: var(--panel); border-radius: 10px; padding: 14px 16px; box-sizing: border-box; }
+h1 { font-size: 18px; margin: 0 0 4px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 16px 0 6px; }
+.lede { margin: 0 0 12px; color: var(--muted); }
+#areas { display: flex; gap: 6px; margin-bottom: 12px; }
+#areas button { flex: 1; padding: 7px 6px; border-radius: 6px; border: 1px solid #2b323b; background: #161a20;
+                color: var(--fg); font: inherit; cursor: pointer; }
+#areas button.on { border-color: #8fb3d9; background: #1d2a38; }
+#legend div { display: flex; align-items: center; gap: 8px; margin: 3px 0; font-size: 13px; }
+#legend .note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+.sw.red { background: var(--red); } .sw.amber { background: var(--amber); }
+.sw.green { background: var(--green); } .sw.grey { background: var(--grey); }
+.card { margin-top: 14px; padding: 12px; border-radius: 8px; background: #161a20; border-left: 4px solid var(--grey); }
+.card.red { border-left-color: var(--red); } .card.amber { border-left-color: var(--amber); }
+.card.green { border-left-color: var(--green); }
+.card .big { font-size: 20px; font-weight: 600; }
+.card .cut { font-size: 15px; margin: 6px 0; }
+.card .src, .fine { color: var(--muted); font-size: 12px; }
+.hidden { display: none; }
+.bldsrc { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.bldsrc button { margin-left: 4px; padding: 2px 6px; border-radius: 4px; border: 1px solid #333b45; background: #1b1f25;
+                 color: var(--muted); font: inherit; cursor: pointer; }
+.bldsrc button.on { color: var(--fg); border-color: #6b7c8f; }
+.bldkey { margin-top: 6px; font-size: 12px; line-height: 1.8; }
+.bldkey .k { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 4px 0 6px; vertical-align: -1px; }
+.bldkey .k:first-child { margin-left: 0; }
+.k.cut { background: #ff7a45; } .k.inside { background: #c084fc; } .k.retain { background: #4fb3a0; }
+#tools { display: flex; gap: 6px; margin-top: 12px; }
+#tools button { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #2f6f8f; background: #12303f;
+                color: #e6f4fb; font: inherit; font-weight: 600; cursor: pointer; }
+#tools button.on { background: #1f5a75; }
+#tools #clearBtn { flex: 0 0 auto; border-color: #444c56; background: #1b1f25; font-weight: 400; }
+#hint { margin-top: 6px; }
+.toggle { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+#gauge { width: 100%; margin: 8px 0 4px; }
+.presets { display: flex; gap: 6px; }
+.presets button { flex: 1; padding: 5px; border-radius: 6px; border: 1px solid #2b4f7a; background: #142233;
+                  color: var(--fg); font: inherit; font-size: 12px; cursor: pointer; }
+.card.flood { border-left-color: #3b82f6; }
+.card.fire { border-left-color: #f97316; }
+.card.fire .big { color: #fdba74; }
+.presets button.on { border-color: #f97316; background: #3a2413; }
+#fireHyp { margin-top: 6px; }
+.gaugehead { margin-top: 8px; }
+#tools button:disabled { opacity: 0.4; cursor: not-allowed; }
+.card.flood .big { color: #93c5fd; }
+.card.mitig { border-left-color: #35c3ff; }
+.card.mitig .big { color: #7fdcff; }
+#ranking { margin: 0; padding-left: 22px; }
+#ranking li { cursor: pointer; margin: 3px 0; }
+#ranking li:hover { color: #fff; text-decoration: underline; }
+#ranking .n { color: var(--red); font-weight: 600; }
+/* fire card: quantitative results first, compact legend, prominent no-prediction statement */
+.fstats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 10px 0 6px; }
+.fs { background: #1d222a; border-radius: 6px; padding: 6px 8px; border-top: 3px solid var(--grey); }
+.fs .n { display: block; font-size: 18px; font-weight: 600; }
+.fs .l { display: block; font-size: 12px; line-height: 1.3; }
+.fs .src { display: block; font-size: 11px; margin-top: 2px; }
+.fs.road { border-top-color: #fde047; } .fs.cut { border-top-color: #ff7a45; }
+.fs.inside { border-top-color: #c084fc; } .fs.retain { border-top-color: #4fb3a0; }
+.fnote { font-size: 13px; margin: 6px 0; }
+.nopredict { margin: 8px 0; padding: 5px 8px; border-radius: 5px; background: #3a2413; color: #fdba74;
+             font-weight: 700; font-size: 13px; }
+.firekey { font-size: 12px; line-height: 1.7; margin: 6px 0; }
+.firekey .k { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.k.zone { background: rgba(239, 68, 68, .1); border: 2px dashed #f87171; box-sizing: border-box; }
+.k.road { background: #fde047; height: 4px; vertical-align: 2px; }
+.card details summary { cursor: pointer; margin-top: 4px; }

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Egress mapper (classic)</title>
+<link rel="stylesheet" href="/vendor/maplibre-gl-6.11.2/maplibre-gl.css">
+<link rel="stylesheet" href="/classic/style.css">
+</head>
+<body>
+<div id="map"></div>
+<aside id="side">
+  <h1>Egress mapper</h1>
+  <p class="lede">Neighbourhoods where one blocked road area could cut many buildings off from a major road.</p>
+  <div id="areas"></div>
+  <div id="legend">
+    <div><span class="sw red"></span>One blocked area cuts off 30+ mapped buildings</div>
+    <div><span class="sw amber"></span>One blocked area cuts off 1–29 mapped buildings</div>
+    <div><span class="sw green"></span>None of the sampled blockages cuts anyone off</div>
+    <div><span class="sw grey"></span>Not assessed (edge of road data)</div>
+    <div class="note">Brighter red streets = more buildings could be cut off. Only neighbourhoods with 30+ mapped buildings are shown.</div>
+  </div>
+  <div id="panel" class="card hidden"></div>
+  <div id="tools">
+    <button id="drawBtn">Test a new road</button>
+    <button id="clearBtn" class="hidden">Clear</button>
+  </div>
+  <div id="hint" class="fine hidden">Click two points on the map: each end joins the nearest existing road junction or road end (within 400 m).</div>
+  <div id="mitig" class="card mitig hidden"></div>
+  <div id="fireBox" class="hidden">
+    <h2>Fire scenario</h2>
+    <label class="toggle"><input type="checkbox" id="fireOnBox"> Show road access under a supplied affected area</label>
+    <div id="fireCtl" class="hidden">
+      <p class="fine"><b>This tool does not predict fire spread.</b> You supply the affected area; the map shows road
+        access under it. The vulnerability classification is not changed.</p>
+      <div class="presets" id="fireModes">
+        <button data-mode="hyp" class="on">Hypothetical area</button>
+        <button data-mode="hist">Mapped 2023 fire perimeter</button>
+      </div>
+      <div id="fireHyp">
+        <div class="gaugehead">Supplied hypothetical affected area: radius <b id="fireRadiusVal">500 m</b></div>
+        <input type="range" id="fireRadius" min="100" max="2000" step="50" value="500">
+        <p class="fine" id="fireHint">Click the map to place the centre. The radius is your input, not a predicted fire extent.</p>
+      </div>
+      <div id="fireOut" class="card fire"></div>
+    </div>
+  </div>
+  <div id="floodBox" class="hidden">
+    <h2>Flood scenario</h2>
+    <label class="toggle"><input type="checkbox" id="floodOnBox"> Show road access under a supplied river level</label>
+    <div id="floodCtl" class="hidden">
+      <p class="fine">You choose the river level. This shows road access under that level — it does not predict flooding,
+        and it does not change the vulnerability classification.</p>
+      <div class="gaugehead">Supplied river level: <b id="gaugeVal">8.36 m gauge height</b></div>
+      <input type="range" id="gauge" min="5" max="9.5" step="0.01" value="8.36" list="gaugeTicks">
+      <datalist id="gaugeTicks"><option value="6.5"></option><option value="8.36"></option></datalist>
+      <div class="fine" id="gaugeElev"></div>
+      <div class="presets">
+        <button data-g="6.5">Flood stage · 6.5 m gauge</button>
+        <button data-g="8.36">2008 peak · 8.36 m gauge</button>
+      </div>
+      <p class="fine">Gauge heights at Saint John River at Fredericton (station 01AK003, CGVD28). The elevation model uses
+        CGVD2013; the conversion is shown under the slider.</p>
+      <div id="floodOut" class="card flood"></div>
+    </div>
+  </div>
+  <h2>Worst sampled blockages</h2>
+  <ol id="ranking"></ol>
+  <p class="fine">Blocked area: a circle 100 m across, tested every 50 m along the roads. The blockage is a
+    hypothetical input — this tool does not predict hazards, traffic or evacuation times.</p>
+</aside>
+<script type="module" src="/classic/app.js"></script>
+</body>
+</html>

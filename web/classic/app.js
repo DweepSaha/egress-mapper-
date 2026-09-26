@@ -18,11 +18,7 @@ async function pickStyle() {
 }
 
 const areas = await (await fetch("/api/areas")).json();
-const style = await pickStyle();
-const stB = document.getElementById("stBasemap");
-stB.className = `st ${style === OFFLINE_STYLE ? "off" : "on"}`;
-stB.textContent = style === OFFLINE_STYLE ? "Basemap off (offline mode)" : "Basemap online";
-const map = new maplibregl.Map({ container: "map", style, center: areas.tantallon.center,
+const map = new maplibregl.Map({ container: "map", style: await pickStyle(), center: areas.tantallon.center,
   zoom: areas.tantallon.zoom, attributionControl: { compact: false } });
 map.addControl(new maplibregl.NavigationControl(), "top-right");
 map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
@@ -175,8 +171,7 @@ function select(nid) {
   const b = new maplibregl.LngLatBounds();
   const add = (c) => (typeof c[0] === "number" ? b.extend(c) : c.forEach(add));
   add(f.geometry.coordinates);
-  map.fitBounds(b, { padding: 60, maxZoom: 16, duration: 900 });
-  syncMode();
+  map.fitBounds(b, { padding: { top: 60, bottom: 60, left: 380, right: 60 }, maxZoom: 16, duration: 900 });
 }
 
 // ---------- mapped building footprints ----------
@@ -268,7 +263,8 @@ async function loadArea(name) {
   bldGen++; bldAppliedNs = null;                 // any in-flight footprint load for the old area becomes stale
   map.getSource("bld").setData(empty); bldShown = { area: null, src: null, ready: false };
   current = name;
-  syncMode();
+  document.getElementById("floodBox").classList.toggle("hidden", name !== "fredericton");
+  document.getElementById("fireBox").classList.toggle("hidden", name !== "tantallon");
   if (typeof clearMitigation === "function") clearMitigation();
   document.querySelectorAll("#areas button").forEach((b) => b.classList.toggle("on", b.dataset.area === name));
   const [scan, roads, boundary] = await Promise.all(
@@ -289,8 +285,6 @@ async function loadArea(name) {
   map.setFilter("blocked", ["==", ["get", "nid"], -1]);
   updateChokeFilter();
   renderRanking();
-  renderSummary();
-  syncMode();
   map.jumpTo({ center: areas[name].center, zoom: areas[name].zoom });
 }
 
@@ -317,7 +311,6 @@ function clearMitigation() {
   document.getElementById("clearBtn").classList.add("hidden");
   document.getElementById("drawBtn").classList.remove("on");
   map.getCanvas().style.cursor = "";
-  if (current) syncMode();
 }
 
 function startDrawing() {
@@ -328,7 +321,6 @@ function startDrawing() {
   document.getElementById("hint").classList.remove("hidden");
   document.getElementById("clearBtn").classList.remove("hidden");
   map.getCanvas().style.cursor = "crosshair";
-  syncMode();
 }
 
 function mitigHtml(r) {
@@ -381,14 +373,12 @@ async function runMitigation() {
     map.getSource("mit-cut").setData(r.after_geo.cut_roads);
   }
   if (selected !== r.before.nid) select(r.before.nid);
-  syncMode();
 }
 
 map.on("click", (e) => {
   if (!drawing) return;
   clicks.push([e.lngLat.lng, e.lngLat.lat]);
   setProposal(clicks.map(pt));
-  syncMode();
   if (clicks.length === 2) runMitigation();
 });
 document.getElementById("drawBtn").onclick = startDrawing;
@@ -480,8 +470,8 @@ async function enterFlood(g) {
     map.setPaintProperty("streets", "line-opacity", 0.25);
     FLOOD_LAYERS.forEach((l) => map.setLayoutProperty(l, "visibility", "visible"));
     $("drawBtn").disabled = true;
+    $("floodOnBox").checked = true;
     $("floodCtl").classList.remove("hidden");
-    syncMode();
     applyBuildingCats();
   }
   const valid = () => act === floodAct && floodOn && current === area;
@@ -509,8 +499,8 @@ function exitFlood(restoreSelection = true) {
   SCAN_OVERLAYS.forEach((l) => map.setLayoutProperty(l, "visibility", "visible"));
   map.setPaintProperty("streets", "line-opacity", STREET_OPACITY);
   $("drawBtn").disabled = false;
+  $("floodOnBox").checked = false;
   $("floodCtl").classList.add("hidden");
-  syncMode();
   $("floodOut").innerHTML = ""; delete $("floodOut").dataset.state;
   const saved = floodSavedBld; floodSavedBld = null;
   if (restoreSelection && saved) {               // restore the pre-flood footprint source and the viewer's pin
@@ -522,6 +512,7 @@ function exitFlood(restoreSelection = true) {
   if (restoreSelection && sel !== null) select(sel);
 }
 
+$("floodOnBox").onchange = (e) => (e.target.checked ? enterFlood() : exitFlood());
 $("gauge").oninput = (e) => updateGaugeReadout(e.target.value);
 $("gauge").onchange = (e) => floodOn && enterFlood(e.target.value);  // on release; an explicit level supersedes older inits
 document.querySelectorAll("#floodCtl .presets button").forEach((b) => (b.onclick = () => enterFlood(b.dataset.g)));
@@ -603,7 +594,6 @@ async function runFire() {
   map.getSource("fi-cut").setData(s.cut_roads);
   out.innerHTML = fireHtml(s) + `<div id="fireBld"></div>`;
   out.dataset.state = "done";
-  syncMode();
   const src = bldPinned || (s.counts.lose_access.ms > s.counts.lose_access.osm ? "ms" : "osm");
   if (bldShown.src !== src) loadBuildings(current, src); else applyBuildingCats();
 }
@@ -616,7 +606,6 @@ function setFireMode(mode) {
   ["fi-zone", "fi-roads", "fi-cut"].forEach((l) => map.getSource(l).setData(empty));
   applyBuildingCats();
   map.getCanvas().style.cursor = fireOn && mode === "hyp" ? "crosshair" : "";
-  syncMode();
   if (fireOn) runFire();
 }
 
@@ -634,6 +623,7 @@ function enterFire(mode) {
     map.setPaintProperty("streets", "line-opacity", 0.25);
     FIRE_LAYERS.forEach((l) => map.setLayoutProperty(l, "visibility", "visible"));
     $("drawBtn").disabled = true;
+    $("fireOnBox").checked = true;
     $("fireCtl").classList.remove("hidden");
   }
   setFireMode(mode || fireMode);
@@ -648,8 +638,8 @@ function exitFire(restoreSelection = true) {
   map.setPaintProperty("streets", "line-opacity", STREET_OPACITY);
   map.getCanvas().style.cursor = "";
   $("drawBtn").disabled = false;
+  $("fireOnBox").checked = false;
   $("fireCtl").classList.add("hidden");
-  syncMode();
   $("fireOut").innerHTML = ""; delete $("fireOut").dataset.state;
   const saved = fireSavedBld; fireSavedBld = null;
   if (restoreSelection && saved) {
@@ -661,49 +651,13 @@ function exitFire(restoreSelection = true) {
   if (restoreSelection && sel !== null) select(sel);
 }
 
-
-// ---------- command-centre shell: scenario tabs, mode indicator, context line, status bar ----------
-const MODE_LABEL = { vuln: "VULNERABILITY", mit: "MITIGATION", flood: "FLOOD SCENARIO", fire: "FIRE SCENARIO" };
-function syncMode() {
-  const mode = floodOn ? "flood" : fireOn ? "fire" : (drawing || proposalCount > 0) ? "mit" : "vuln";
-  const chip = $("ctxMode");
-  chip.className = `chip mode-${mode}`; chip.textContent = MODE_LABEL[mode];
-  $("ctxArea").textContent = current ? areas[current].label : "";
-  document.querySelectorAll("#modes button").forEach((b) => {
-    b.classList.toggle("on", b.dataset.mode === (mode === "mit" ? "vuln" : mode));
-    if (b.dataset.mode === "flood") b.classList.toggle("hidden", current !== "fredericton");   // flood: Fredericton only
-    if (b.dataset.mode === "fire") b.classList.toggle("hidden", current !== "tantallon");      // fire: Tantallon only
-  });
-  $("vulnBox").classList.toggle("hidden", floodOn || fireOn);
-  $("floodBox").classList.toggle("hidden", !floodOn);
-  $("fireBox").classList.toggle("hidden", !fireOn);
-  $("rankBox").classList.toggle("hidden", floodOn || fireOn);
-  $("anaCtx").textContent =
-    fireOn && fireMode === "hyp" && !fireCentre ? "Click the map to place the supplied affected area."
-    : !floodOn && !fireOn && selected === null && !drawing ? "Select a neighbourhood on the map or from the list below."
-    : "";
-}
-function renderSummary() {
-  const c = scanData.summary.counts, n = (k) => c[k] || 0;
-  $("stSummary").innerHTML = `<b>${areas[current].label}</b> · neighbourhoods of 30+ mapped buildings:
-    <span class="dot red"></span>${n("red")} cut off 30+ <span class="dot amber"></span>${n("amber")} cut off 1–29
-    <span class="dot green"></span>${n("green")} none <span class="dot grey"></span>${n("not_assessed")} not assessed`;
-}
-document.querySelectorAll("#modes button").forEach((b) => (b.onclick = () => {
-  const m = b.dataset.mode;
-  if (m === "vuln") { if (floodOn) exitFlood(); if (fireOn) exitFire(); }
-  else if (m === "flood") { if (fireOn) exitFire(false); if (!floodOn) enterFlood(); }
-  else if (m === "fire") { if (floodOn) exitFlood(false); if (!fireOn) enterFire(); }
-}));
-$("resetView").onclick = () => current && map.flyTo({ center: areas[current].center, zoom: areas[current].zoom,
-                                                        pitch: 0, bearing: 0, duration: 800 });
+$("fireOnBox").onchange = (e) => (e.target.checked ? enterFire() : exitFire());
 document.querySelectorAll("#fireModes button").forEach((b) => (b.onclick = () => fireOn && setFireMode(b.dataset.mode)));
 $("fireRadius").oninput = (e) => ($("fireRadiusVal").textContent = `${(+e.target.value).toLocaleString()} m`);
 $("fireRadius").onchange = () => fireOn && fireMode === "hyp" && runFire();   // on release
 map.on("click", (e) => {
   if (!fireOn || fireMode !== "hyp") return;
   fireCentre = [+e.lngLat.lng.toFixed(6), +e.lngLat.lat.toFixed(6)];
-  syncMode();
   runFire();
 });
 
@@ -761,10 +715,10 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
   unfire: () => exitFire(),
   fireState: () => ({ on: fireOn, mode: fireMode, area: current, cardState: $("fireOut").dataset.state || null,
     cardText: $("fireOut").textContent.replace(/\s+/g, " ").trim(), bldStates: bldStateN,
-    boxHidden: document.querySelector('#modes [data-mode="fire"]').classList.contains("hidden") }),
+    boxHidden: $("fireBox").classList.contains("hidden") }),
   floodState: () => ({ on: floodOn, area: current, cardState: $("floodOut").dataset.state || null,
     cardText: $("floodOut").textContent.replace(/\s+/g, " ").trim(), bldStates: bldStateN,
-    boxHidden: document.querySelector('#modes [data-mode="flood"]').classList.contains("hidden"), coverFeatures,
+    boxHidden: $("floodBox").classList.contains("hidden"), coverFeatures,
     bldSrc: bldShown.src, bldReady: bldShown.ready, bldPinned }),
   state() {
     const box = document.getElementById("mitig");
@@ -773,4 +727,4 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
              clearVisible: !document.getElementById("clearBtn").classList.contains("hidden") };
   },
 };
-if (["1", "flood", "fire"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only
+if (["1", "flood", "fire"].includes(q.get("selftest"))) import("/classic/selftest.js");   // explicit test URLs only
