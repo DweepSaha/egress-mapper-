@@ -2,8 +2,16 @@
         --red: #e0524a; --amber: #e0a526; --green: #3fb27f; --grey: #6b7280; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
              font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+html, body { overflow: hidden; }           /* the app shell is the viewport: the document itself never scrolls */
 #map { position: absolute; inset: 0; background: var(--bg); }
-#side { position: absolute; top: 12px; left: 12px; bottom: 12px; width: 330px; overflow-y: auto; z-index: 2;
+/* self-test results (only created with ?selftest=...): a fixed overlay inside the viewport, never in the page flow */
+#selftest { position: fixed; right: 12px; bottom: 12px; width: min(460px, calc(100vw - 380px)); max-height: 45vh;
+            overflow: auto; z-index: 10; margin: 0; padding: 10px; border: 1px solid #f59e0b; border-radius: 8px;
+            background: rgba(20, 16, 8, .95); color: #fde68a; font: 11px/1.4 ui-monospace, Consolas, monospace;
+            white-space: pre-wrap; }
+#selftest::before { content: "SELF-TEST RESULTS (?selftest mode only)\A"; font-weight: 700; color: #f59e0b; }
+#side { position: absolute; top: 12px; left: 12px; bottom: 12px; width: 330px; overflow-y: auto; overflow-x: hidden;
+        overscroll-behavior: contain; max-width: calc(100vw - 24px); z-index: 2;
         background: var(--panel); border-radius: 10px; padding: 14px 16px; box-sizing: border-box; }
 h1 { font-size: 18px; margin: 0 0 4px; }
 h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 16px 0 6px; }
