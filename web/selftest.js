@@ -17,6 +17,7 @@ const bldDelays = [];     // ... to /buildings/ footprint responses
 const fireDelays = [];    // ... to /fire/ scenario responses
 const probeDelays = [];   // ... to /probe responses (user-placed blockage)
 const probeBodies = [];   // request bodies sent to /probe (the raw release point)
+const scanDelays = [];    // delays (ms) applied to /scan responses (area load)
 let apiCalls = 0;
 const urlLog = [];        // every request URL, in order (xarea suite)         // every /api/ request (the 3D suite asserts that toggling 2D/3D makes none)
 window.fetch = async (url, opts) => {
@@ -28,6 +29,12 @@ window.fetch = async (url, opts) => {
       await sleep(d);
       return resp;
     }
+  }
+  if (String(url).includes("/scan")) {
+    const d = scanDelays.length ? scanDelays.shift() : 0;
+    const resp = await realFetch(url, opts);
+    await sleep(d);
+    return resp;
   }
   if (String(url).includes("/probe") && !String(url).includes("/probe-roads")) {
     probeBodies.push(JSON.parse(opts.body));
@@ -531,6 +538,36 @@ async function xareaSuite() {
   await app.loadArea("tantallon"); await sleep(600);
   record("XC3 area switch from a scenario discards the saved view (nothing carries across areas)",
     app.scenSaved() === null && JSON.parse(app.snapshot()).selected === null, {});
+  // XD (Codex P2-2): switch to Fredericton with a delayed scan -> try fire -> old load completes: no mixed rendering
+  const SCANL = ["choke", "blocked", "blocked-hatch", "blocked-edge", "cut"], FIREL = ["fi-zone", "fi-zone-line", "fi-cut", "fi-roads"];
+  const FLOODL = ["fl-water", "fl-water-line", "fl-cut", "fl-roads"];
+  const consistent = () => (app.fireState().on ? FIREL.every(on) && SCANL.every(off) : FIREL.every(off)) &&
+    (app.floodState().on ? SCANL.every(off) : FLOODL.every(off)) && (app.fireState().on || app.floodState().on || SCANL.every(on));
+  scanDelays.push(1500);
+  const lp = app.loadArea("fredericton"); await sleep(150);
+  const readyMid = app.areaReady(), tabDisabled = document.querySelector('#modes [data-mode="fire"]').disabled;
+  tab("fire"); app.fire("hyp", FC, 500); await sleep(300);
+  const fireMid = app.fireState().on;
+  await lp; await sleep(400);
+  const afterLoad = { fire: app.fireState().on, ok: consistent() };
+  tab("fire"); app.fire("hyp", FC, 500); await done();
+  record("XD delayed area load: fire cannot start until the load completes; afterwards fire renders consistently",
+    !readyMid && tabDisabled && !fireMid && !afterLoad.fire && afterLoad.ok && app.fireState().on && consistent() && FIREL.every(on),
+    { readyMid, tabDisabled, fireMid, afterLoad });
+  tab("vuln"); await sleep(400);
+  // XE the same for flood
+  await app.loadArea("tantallon"); await sleep(300);
+  scanDelays.push(1500);
+  const lp2 = app.loadArea("fredericton"); await sleep(150);
+  tab("flood"); await app.flood(8.36); await sleep(200);
+  const floodMid = app.floodState().on;
+  await lp2; await sleep(400);
+  const ok2 = !app.floodState().on && consistent();
+  tab("flood"); await sleep(200); await app.flood(8.36);
+  for (let i = 0; i < 150 && app.floodState().cardState !== "done"; i++) await sleep(150);
+  record("XE delayed area load: flood cannot start until the load completes; afterwards flood renders consistently",
+    !floodMid && ok2 && app.floodState().on && consistent() && FLOODL.every(on), { floodMid, ok2 });
+  tab("vuln"); await sleep(300);
 }
 
 async function fireDragSuite() {
@@ -584,6 +621,14 @@ async function fireDragSuite() {
   // FD5 click-to-place still works (and a drag release is not also a click)
   await sleep(200); urlLog.length = 0; app.fireClick(...C); const fin5 = await settle();
   record("FD5 click-to-place unchanged", near(fin5.centre, C) && fireReqs().length === 1 && fin5.state === "done", { centre: fin5.centre });
+  // FD8 (Codex P2-3): committed 500 m -> drag -> 900 m mid-drag -> Esc: committed 500 m result AND slider/readout
+  app.fireRadius(500); const f8a = await settle();
+  urlLog.length = 0;
+  app.fireDragStart(); app.fireDragMove(...A); app.fireRadius(900); await sleep(150); app.fireDragEnd(true); await sleep(300);
+  const f8 = await I();
+  record("FD8 500 m -> drag -> 900 m -> Esc: committed 500 m result, slider/readout 500 m, no request",
+    f8a.radius === 500 && f8.radius === 500 && app.fireSlider() === 500 && fireReqs().length === 0 && f8.previewFeatures === 0 &&
+    document.getElementById("fireRadiusVal").textContent === "500 m" && near(f8.centre, C), { slider: app.fireSlider(), radius: f8.radius, reqs: fireReqs() });
   // FD6 area switch mid-drag: gesture ended, map pan restored, preview gone, fire off
   app.fireDragStart(); app.fireDragMove(...A);
   await app.loadArea("fredericton"); await sleep(400);
@@ -694,6 +739,45 @@ async function probeRadiusSuite() {
     { radius: s5.radius, slider: app.probeSlider() });
   app.probeRadius(50); await done();
   const s6 = P();
+  app.probeReset(); await sleep(200);
+  // PR7 (Codex P2-1): delayed 150 m request -> slider back to 50 m -> the 150 m response arrives: must change nothing
+  probeDelays.push(1500);
+  app.probeRadius(150); await sleep(150);
+  app.probeRadius(50); await sleep(1800);
+  const s7 = P();
+  record("PR7 delayed 150 m -> back to 50 m -> late 150 m response: scan's 50 m result stays, nothing of 150 m shown",
+    app.probeSlider() === 50 && !s7.shown && s7.state === "none" && JSON.stringify(s7.blocked) === scanFilter &&
+    s7.probeFeatures === 0 && app.previewN() === 0 && s7.badge === "Map shows: worst sampled blockage (50 m radius)",
+    { slider: app.probeSlider(), s7: { shown: s7.shown, state: s7.state, radius: s7.radius } });
+  // PR8 (Codex P2-3): committed 150 m -> drag -> slider 200 m mid-drag -> Esc: committed 150 m result AND slider restored
+  app.probeRadius(150); await done();
+  probeBodies.length = 0;
+  app.probeDragStart(); app.probeDragMove(...OTHER); app.probeRadius(200); await sleep(150); app.probeDragEnd(true); await sleep(200);
+  const s8 = P();
+  record("PR8 150 m -> drag -> 200 m -> Esc: committed 150 m result and slider/readout 150 m, no request",
+    s8.shown && s8.radius === 150 && app.probeSlider() === 150 && probeBodies.length === 0 && app.previewN() === 0 &&
+    document.getElementById("probeRadiusVal").textContent.startsWith("150 m"), { slider: app.probeSlider(), radius: s8.radius, bodies: probeBodies.length });
+  app.probeReset(); await sleep(200);
+  // PR9 Reset during a pending radius request
+  probeDelays.push(1500); app.probeRadius(170); await sleep(150); app.probeReset(); await sleep(1800);
+  const s9 = P();
+  record("PR9 Reset during a pending radius request: 50 m scan result, late answer ignored",
+    !s9.shown && app.probeSlider() === 50 && JSON.stringify(s9.blocked) === scanFilter && app.previewN() === 0, { slider: app.probeSlider() });
+  // PR10 scenario switch during a pending radius request
+  probeDelays.push(1500); app.probeRadius(170); await sleep(150);
+  document.querySelector('#modes [data-mode="fire"]').click(); await sleep(1800);
+  const s10 = P();
+  record("PR10 scenario switch during a pending radius request: probe dropped, slider 50, fire active",
+    !s10.shown && app.probeSlider() === 50 && app.fireState().on && app.previewN() === 0, { slider: app.probeSlider() });
+  document.querySelector('#modes [data-mode="vuln"]').click(); await sleep(600);
+  // PR11 area switch during a pending radius request
+  app.select(99); await sleep(900);
+  probeDelays.push(1500); app.probeRadius(170); await sleep(150);
+  await app.loadArea("fredericton"); await sleep(1800);
+  const s11 = P();
+  record("PR11 area switch during a pending radius request: nothing applied, slider 50",
+    !s11.shown && app.probeSlider() === 50 && app.previewN() === 0, { slider: app.probeSlider() });
+  await app.loadArea("tantallon"); app.select(99); await sleep(900);
   record("PR6 radius back to 50 m at a placed position: comparable, no warning", s6.shown && s6.radius === 50 && s6.comparable === true &&
     !s6.card.includes("not comparable"), { radius: s6.radius });
   app.probeReset();

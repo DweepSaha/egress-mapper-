@@ -244,6 +244,7 @@ captureFade([...SCAN_OVERLAYS, "fl-water", "fl-water-line", "fl-cut", "fl-roads"
 const FLOOD_FADE = ["fl-water", "fl-water-line", "fl-cut", "fl-roads"];
 fade(FLOOD_FADE, false, 0); fade(FIRE_LAYERS, false, 0);
 let fireOn = false, fireGen = 0, fireData = null, fireMode = "hyp", fireCentre = null;
+let fireReqR = null;         // radius of the last hypothetical request made (completed or pending): the committed radius
 // The vulnerability view saved when the FIRST scenario opens (selection + footprint source/pin). Switching flood <-> fire
 // hands it over unchanged ("handoff"); returning to vulnerability restores it; selection/area changes discard it.
 let scenSaved = null;
@@ -253,6 +254,7 @@ const normFireMode = (mode, area = current) => (mode === "hist" && can(area, "fi
 const exitHow = (h) => (h === true || h === undefined ? "restore" : h === false ? "discard" : h);
 
 let current = null, scanData = null, selected = null;
+let areaReady = false;       // false while loadArea() is fetching; scenario and probe entry wait for it
 let drawing = false, clicks = [];
 let floodOn = false, floodGen = 0, floodData = null, floodInfo = null;
 let bldStateN = 0, coverFeatures = 0, floodAct = 0, coverInstalled = false;
@@ -478,6 +480,7 @@ function renderOverview() {
 }
 
 async function loadArea(name) {
+  areaReady = false;                      // until THIS area's data is rendered, no scenario/probe state may start
   if (floodOn) exitFlood("discard");      // switching areas always clears the flood scenario
   if (fireOn) exitFire("discard");        // ...and the fire scenario
   scenSaved = null; fireMode = "hyp";     // nothing (selection, source, historical mode) carries across areas
@@ -515,6 +518,7 @@ async function loadArea(name) {
   renderBlockage();
   renderOverview();
   renderSummary();
+  areaReady = true;                                      // this (newest) area is fully rendered
   syncMode();
   for (const k in shownNum) delete shownNum[k];          // numbers never "settle" across areas
   attention(null);                                       // no ring carried across areas
@@ -723,7 +727,7 @@ async function runFlood(g) {
 }
 
 async function enterFlood(g) {
-  if (!can(current, "flood")) return;
+  if (!areaReady || !can(current, "flood")) return;
   // every enable / disable / explicit level bumps floodAct, so an older initialization that resumes after an await
   // (e.g. a slow /flood/info) exits without touching controls, coverage, the slider or the calculation
   const act = ++floodAct, area = current;
@@ -856,6 +860,7 @@ async function runFire() {
   if (mode === "hyp" && !fireCentre) { out.innerHTML = ""; delete out.dataset.state; return; }
   const radius = +$("fireRadius").value;
   if (mode === "hist" && !can(area, "fire_hist")) return;       // never request another area's perimeter
+  if (mode === "hyp") fireReqR = radius;
   const url = mode === "hist" ? `/api/${area}/fire/historical`
     : `/api/${area}/fire/hypothetical?lon=${fireCentre[0]}&lat=${fireCentre[1]}&radius=${radius}`;
   out.dataset.state = "pending";
@@ -908,7 +913,7 @@ function setFireMode(mode) {
 }
 
 function enterFire(mode) {
-  if (!can(current, "fire_hyp")) return;
+  if (!areaReady || !can(current, "fire_hyp")) return;
   if (!fireOn) {
     clearMitigation();
     if (!scenSaved) scenSaved = { sel: selected, src: bldShown.src, pinned: bldPinned };   // only when leaving vulnerability
@@ -1025,7 +1030,7 @@ function selProps() {
 }
 function canProbe() {
   const p = selProps();
-  return !!(p && p.status !== "not_assessed" && !floodOn && !fireOn && !drawing && proposalCount === 0);
+  return !!(areaReady && p && p.status !== "not_assessed" && !floodOn && !fireOn && !drawing && proposalCount === 0);
 }
 // local metric frame for the preview (display only; the server does the authoritative snap in the analysis CRS)
 function localFrame(lat0) { const kx = 111320 * Math.cos((lat0 * Math.PI) / 180), ky = 110540; return { kx, ky }; }
@@ -1115,7 +1120,7 @@ function renderProbeCard() {
   const reset = `<button id="probeReset" class="probe-reset">Reset to worst sampled blockage</button>`;
   let body;
   if (probeState === "dragging") body = `<div class="big">Release to test this blockage</div>
-    <div class="fine">Nothing is recalculated until you release. The circle stays on the roads (fixed 100 m across).</div>`;
+    <div class="fine">Nothing is recalculated until you release. The circle stays on the roads; its size is the radius slider's.</div>`;
   else if (probeState === "pending") body = `<div class="big">Testing…</div><div class="fine">One calculation for the blockage you placed.</div>`;
   else if (probeShown()) {
     const d = probe.data, c = d.counts;
@@ -1155,12 +1160,13 @@ function clearProbe() {       // reset to the worst sampled blockage; invalidate
   renderBlockage();
   if (had) applyBuildingCats();
 }
+const restoreProbeRadius = () => setProbeRadius(probeShown() ? probe.data.radius_m : SCAN_R);   // the committed radius
 function probeEnd(d, released) {                     // gesture end (release, Esc or invalidation)
   drag = null;
   const valid = d.area === current && d.nid === selected && canProbe();
-  if (!valid) { setPreview(empty); probeState = probeShown() ? "done" : "none"; renderBlockage(); return; }
-  if (!released || !d.moved || !d.cursor) {            // cancelled (Esc) or a click without a drag: nothing to test
-    setPreview(empty); probeMsg = ""; probeState = probeShown() ? "done" : "none";
+  if (!valid) { setPreview(empty); restoreProbeRadius(); probeState = probeShown() ? "done" : "none"; renderBlockage(); return; }
+  if (!released || !d.moved || !d.cursor) {            // cancelled (Esc) or a click without a drag: restore everything
+    setPreview(empty); restoreProbeRadius(); probeMsg = ""; probeState = probeShown() ? "done" : "none";
     renderBlockage(); return;
   }
   // the server is the single authority: it receives the RAW cursor and decides eligibility, tolerance and the centre
@@ -1201,7 +1207,8 @@ function startProbeDrag(e) {
 }
 async function runProbe(ll, previewAt) {          // ll = raw release point; previewAt = suggested spot to show meanwhile
   const gen = ++probeGen, area = current, nid = selected, radius = probeR();
-  const valid = () => gen === probeGen && current === area && selected === nid && !floodOn && !fireOn;
+  // accepted only while it is still the newest request AND the committed radius is still the one it asked for
+  const valid = () => gen === probeGen && current === area && selected === nid && !floodOn && !fireOn && probeR() === radius;
   probeState = "pending"; probeMsg = "";
   setPreview(previewAt ? discAt(previewAt, radius) : empty);
   renderProbeCard();
@@ -1217,7 +1224,7 @@ async function runProbe(ll, previewAt) {          // ll = raw release point; pre
   if (d.ok && d.radius_m !== radius) d = { ok: false, message: "Radius mismatch." };   // never show another radius
   if (!d.ok) {
     probeMsg = `${d.message} The blockage went back to where it was.`; probeState = probeShown() ? "done" : "rejected";
-    setProbeRadius(probeShown() ? probe.data.radius_m : SCAN_R);   // the slider always matches what the map shows
+    restoreProbeRadius();                              // the slider always matches what the map shows
     renderBlockage(); return;
   }
   probe = { area, nid, data: d }; probeState = "done";
@@ -1264,9 +1271,12 @@ function fireDragEnd(g, released) {
   fireClickBlockUntil = Date.now() + 120;             // the release's own click event must not also place the centre
   const valid = fireOn && fireMode === "hyp" && current === g.area;
   if (!valid) { setFirePreview(empty); renderFireBadge(); renderFireHandle(); return; }
-  if (!released || !g.moved || !g.cursor) {           // Esc / no movement: nothing to test
+  if (!released || !g.moved || !g.cursor) {           // Esc / no movement: restore the committed centre AND radius
+    if (fireReqR !== null && +$("fireRadius").value !== fireReqR) {
+      $("fireRadius").value = fireReqR; $("fireRadiusVal").textContent = `${fireReqR.toLocaleString()} m`;
+    }
     setFirePreview(empty); renderFireBadge(); renderFireHandle();
-    if (g.wasPending) runFire();                      // the drag superseded a calculation for the unchanged centre
+    if (g.wasPending) runFire();                      // the drag superseded a calculation for the unchanged centre+radius
     return;
   }
   fireCentre = [+g.cursor[0].toFixed(6), +g.cursor[1].toFixed(6)];   // same precision as click-to-place
@@ -1289,7 +1299,7 @@ $("probeRadius").onchange = (e) => {
   const r = +e.target.value;
   if (drag && gesture === drag) { setPreview(discAt(drag.pos, r)); return; }
   if (!canProbe()) return;
-  if (!probeShown() && r === SCAN_R) { setPreview(empty); return; }   // the scan's own 50 m answer is already shown
+  if (!probeShown() && r === SCAN_R) { clearProbe(); return; }   // back to the scan's own 50 m answer: invalidates any pending request
   const c = blockageCentre();
   if (c) runProbe(c, c);                               // a placed blockage at this centre with the user's radius
 };
@@ -1311,6 +1321,7 @@ function syncMode() {
     b.classList.toggle("on", b.dataset.mode === (mode === "mit" ? "vuln" : mode));
     if (b.dataset.mode === "flood") b.classList.toggle("hidden", !can(current, "flood"));     // Fredericton only
     if (b.dataset.mode === "fire") b.classList.toggle("hidden", !can(current, "fire_hyp"));   // both areas
+    b.disabled = b.dataset.mode !== "vuln" && !areaReady;                                     // wait for the area load
   });
   const histBtn = document.querySelector('#fireModes [data-mode="hist"]');
   if (histBtn) histBtn.classList.toggle("hidden", !can(current, "fire_hist"));              // Tantallon only
@@ -1332,8 +1343,8 @@ function renderSummary() {
 document.querySelectorAll("#modes button").forEach((b) => (b.onclick = () => {
   const m = b.dataset.mode;
   if (m === "vuln") { if (floodOn) exitFlood(); if (fireOn) exitFire(); }
-  else if (m === "flood") { if (!can(current, "flood")) return; if (fireOn) exitFire("handoff"); if (!floodOn) enterFlood(); }
-  else if (m === "fire") { if (!can(current, "fire_hyp")) return; if (floodOn) exitFlood("handoff"); if (!fireOn) enterFire(); }
+  else if (m === "flood") { if (!areaReady || !can(current, "flood")) return; if (fireOn) exitFire("handoff"); if (!floodOn) enterFlood(); }
+  else if (m === "fire") { if (!areaReady || !can(current, "fire_hyp")) return; if (floodOn) exitFlood("handoff"); if (!fireOn) enterFire(); }
 }));
 $("resetView").onclick = () => current && map.flyTo({ center: areas[current].center, zoom: areas[current].zoom,
                                                         pitch: view === "3d" ? PITCH_3D : 0, bearing: view === "3d" ? BEARING_3D : 0, duration: dur(800) });
@@ -1498,6 +1509,11 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
     const el = $("probeRadius"); el.value = r; el.dispatchEvent(new Event("input")); if (commit) el.dispatchEvent(new Event("change"));
   },
   probeSlider: () => probeR(),
+  areaReady: () => areaReady,
+  fireSlider: () => +$("fireRadius").value,
+  fireRadius(r, commit = true) {
+    const el = $("fireRadius"); el.value = r; el.dispatchEvent(new Event("input")); if (commit) el.dispatchEvent(new Event("change"));
+  },
   probeInfo: () => ({ shown: probeShown(), state: probeState, gen: probeGen, dragging: !!drag, msg: probeMsg,
     centre: probe ? probe.data.centre : null, cut: probe ? [probe.data.cut_osm, probe.data.cut_ms] : null,
     card: $("probeCard").textContent.replace(/\s+/g, " ").trim(), badge: $("blkBadge").textContent,
