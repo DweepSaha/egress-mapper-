@@ -41,10 +41,27 @@ map.addControl(new maplibregl.NavigationControl(), "top-right");
 map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
 await new Promise((r) => map.once("load", r));
 
+// Our layer and source ids all carry distinctive names: a basemap style (OpenFreeMap has "water", "building",
+// "boundary_*", ...) must never share one. MapLibre does not replace an existing id: it logs an error and our layer is
+// simply missing. Every id we add is recorded, and a clash is reported (console + __app.idCheck, checked in the demo suite).
+const OWN = { layers: [], sources: [], collisions: [] };
+{
+  const addLayer = map.addLayer.bind(map), addSource = map.addSource.bind(map);
+  map.addLayer = (layer, before) => {
+    OWN.layers.push(layer.id);
+    if (map.getLayer(layer.id)) { OWN.collisions.push(`layer ${layer.id}`); console.error(`[egress] layer id "${layer.id}" already exists in the basemap style`); }
+    return addLayer(layer, before);
+  };
+  map.addSource = (id, src) => {
+    OWN.sources.push(id);
+    if (map.getSource(id)) { OWN.collisions.push(`source ${id}`); console.error(`[egress] source id "${id}" already exists in the basemap style`); }
+    return addSource(id, src);
+  };
+}
 const empty = { type: "FeatureCollection", features: [] };
 const OSM = "© OpenStreetMap contributors";
-map.addSource("boundary", { type: "geojson", data: empty });
-map.addSource("roads", { type: "geojson", data: empty, attribution: OSM });
+map.addSource("egress-boundary", { type: "geojson", data: empty });
+map.addSource("egress-roads", { type: "geojson", data: empty, attribution: OSM });
 map.addSource("nb", { type: "geojson", data: empty,
   attribution: "Building footprints © Microsoft (ODbL); © OpenStreetMap contributors" });
 map.addSource("streets", { type: "geojson", data: empty });
@@ -54,13 +71,13 @@ map.addSource("choke", { type: "geojson", data: empty });
 
 // Mapped water (OSM water/riverbank/reservoir): geographic context only, never used by any calculation. Subdued and
 // desaturated so the flood scenario's supplied inundation (bright blue, drawn above) is always distinguishable.
-map.addSource("water", { type: "geojson", data: empty, attribution: OSM });
-map.addLayer({ id: "water", type: "fill", source: "water", paint: { "fill-color": "#1a2c3d", "fill-opacity": 0.95 } });
-map.addLayer({ id: "water-line", type: "line", source: "water", paint: { "line-color": "#2a4258", "line-width": 0.6 } });
-map.addLayer({ id: "boundary", type: "fill", source: "boundary", paint: { "fill-color": "#6b7280", "fill-opacity": 0.18 } });
+map.addSource("egress-water", { type: "geojson", data: empty, attribution: OSM });
+map.addLayer({ id: "egress-water", type: "fill", source: "egress-water", paint: { "fill-color": "#1a2c3d", "fill-opacity": 0.95 } });
+map.addLayer({ id: "egress-water-line", type: "line", source: "egress-water", paint: { "line-color": "#2a4258", "line-width": 0.6 } });
+map.addLayer({ id: "egress-boundary", type: "fill", source: "egress-boundary", paint: { "fill-color": "#6b7280", "fill-opacity": 0.18 } });
 // invisible click targets (the neighbourhood's area); status is drawn on the street lines below
 map.addLayer({ id: "nb-fill", type: "fill", source: "nb", paint: { "fill-color": "#000", "fill-opacity": 0 } });
-map.addLayer({ id: "roads", type: "line", source: "roads", paint: {
+map.addLayer({ id: "egress-roads", type: "line", source: "egress-roads", paint: {
   "line-color": ["case", ["get", "way_out"], "#e8edf2", "#4b5663"],
   "line-width": ["interpolate", ["linear"], ["zoom"], 11, ["case", ["get", "way_out"], 1.4, 0.3],
                  16, ["case", ["get", "way_out"], 4, 1.2]] } });
@@ -76,16 +93,16 @@ const BLD_FILL_RGBA = ["match", BLD_CAT, "cut", ["rgba", 255, 122, 69, 0.95], "i
 const BLD_LINE_RGBA = ["match", BLD_CAT, "cut", ["rgba", 255, 122, 69, 1], "inside", ["rgba", 192, 132, 252, 1],
   "retain", ["rgba", 79, 179, 160, 0], ["rgba", 59, 68, 82, 0]];
 map.addLayer({ id: "bld-fill", type: "fill", source: "bld", minzoom: 12,
-  paint: { "fill-color": BLD_FILL_RGBA, "fill-opacity": 1 } }, "roads");
+  paint: { "fill-color": BLD_FILL_RGBA, "fill-opacity": 1 } }, "egress-roads");
 map.addLayer({ id: "bld-line", type: "line", source: "bld", minzoom: 14,
-  paint: { "line-color": BLD_LINE_RGBA, "line-width": 0.6, "line-opacity": 1 } }, "roads");
+  paint: { "line-color": BLD_LINE_RGBA, "line-width": 0.6, "line-opacity": 1 } }, "egress-roads");
 // 3D view (presentation only): the same polygons and category colours, extruded to one fixed illustrative height.
 // Placed below the road layers so roads, choke points, the proposed connection and hazard lines stay readable on top.
 const BLD_HEIGHT_M = 14;         // illustrative, identical for every mapped building (real heights are not available)
 const BLD_COLOR_3D = ["match", BLD_CAT, "cut", "#ff7a45", "inside", "#c084fc", "retain", "#4fb3a0", "#5a6573"];
 map.addLayer({ id: "bld-3d", type: "fill-extrusion", source: "bld", minzoom: 12, layout: { visibility: "none" },
   paint: { "fill-extrusion-color": BLD_COLOR_3D, "fill-extrusion-height": BLD_HEIGHT_M, "fill-extrusion-base": 0,
-           "fill-extrusion-opacity": 0.92, "fill-extrusion-vertical-gradient": true } }, "roads");
+           "fill-extrusion-opacity": 0.92, "fill-extrusion-vertical-gradient": true } }, "egress-roads");
 // a lower, stronger light than the default so walls and roofs shade differently (depth cue); affects extrusions only
 map.setLight({ anchor: "viewport", color: "#ffffff", intensity: 0.6, position: [1.2, 200, 35] });
 
@@ -507,7 +524,7 @@ function renderOverview() {
   el.querySelectorAll(".toprow").forEach((b) => (b.onclick = () => select(+b.dataset.nid)));
 }
 
-const AREA_SRCS = ["roads", "boundary", "nb", "streets", "cut", "blocked", "choke"];
+const AREA_SRCS = ["egress-roads", "egress-boundary", "nb", "streets", "cut", "blocked", "choke"];
 async function getJSON(url) {           // fetch + JSON; a non-2xx answer throws with the server's reason
   const r = await fetch(url);
   if (!r.ok) {
@@ -531,17 +548,25 @@ function renderAreaPending(name, gen, err = null) {   // overview while an area 
     $("areaRetry").onclick = () => loadArea(name);
     return;
   }
-  const slow = a && !a.pinned && a.prep_s >= 8;
+  // honest progress: what the server is doing (reading a saved scan, or scanning), its estimate, the elapsed time,
+  // and a plain statement once it runs well past the estimate. Pinned areas are resident: no message needed.
+  const est = a && !a.pinned ? a.open_s : null;          // seconds; null = unknown
+  const what = !a || a.pinned ? "" : a.cached
+    ? `Reading this area's saved scan from disk${est ? `: about ${est} s` : ""}.`
+    : `Running the scan on the server (first visit)${est ? `: about ${est} s` : ""}. It is saved afterwards, so later
+       visits take a few seconds.`;
   const t0 = Date.now();
   const draw = () => {
     const s = Math.round((Date.now() - t0) / 1000);
+    const late = est !== null && est !== undefined && s > est * 1.5 + 5;
     el.innerHTML = `<div class="kicker">Area overview</div><div class="big">${label}</div>${noticeHtml()}
-      <div class="blk loading"><div class="bh">Preparing this area…${slow ? ` ${s} s` : ""}</div>
-      ${slow ? `<div class="fine">The first visit runs the scan on the server: about ${a.prep_s} s for this area. It stays
-        loaded until you open another area outside the two pinned ones.</div>` : ""}</div>`;
+      <div class="blk loading"><div class="bh">Preparing this area…${what ? ` ${s} s` : ""}</div>
+      ${what ? `<div class="fine">${what}</div>` : ""}
+      ${late ? `<div class="fine"><b>Taking longer than expected.</b> The server is still working; it prepares one area at a
+        time, so an earlier request may be finishing first.</div>` : ""}</div>`;
   };
   draw();
-  if (slow) loadTick = setInterval(() => (gen === areaGen ? draw() : clearInterval(loadTick)), 1000);
+  if (what) loadTick = setInterval(() => (gen === areaGen ? draw() : clearInterval(loadTick)), 1000);
 }
 
 async function loadArea(name) {
@@ -556,7 +581,7 @@ async function loadArea(name) {
   map.removeFeatureState({ source: "bld" }); bldStateN = 0;
   bldGen++; bldAppliedNs = null;                 // any in-flight footprint load for the old area becomes stale
   map.getSource("bld").setData(empty); bldShown = { area: null, src: null, ready: false };
-  map.getSource("water").setData(empty);
+  map.getSource("egress-water").setData(empty);
   // the old area leaves the map now: nothing from it can be clicked or selected while the new one loads
   clearProbe();
   if (selected !== null) map.setFeatureState({ source: "streets", id: selected }, { selected: false });
@@ -587,12 +612,13 @@ async function loadArea(name) {
   }
   if (gen !== areaGen) return;
   clearInterval(loadTick); loadTick = null;
+  if (!a.pinned && !a.cached) { a.cached = true; a.open_s = null; renderPicker(); }   // the server saved it: later visits read it
   scanData = scan;
   loadBuildings(name, "osm");   // subtle background footprints; loads after the roads, never blocks them
   fetch(`/api/${name}/water`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-    .then((w) => { if (gen === areaGen) map.getSource("water").setData(w); }).catch(() => {});   // context only
-  map.getSource("roads").setData(roads);
-  map.getSource("boundary").setData(boundary);
+    .then((w) => { if (gen === areaGen) map.getSource("egress-water").setData(w); }).catch(() => {});   // context only
+  map.getSource("egress-roads").setData(roads);
+  map.getSource("egress-boundary").setData(boundary);
   map.getSource("nb").setData(scan.neighbourhoods);
   map.getSource("streets").setData(scan.streets);
   map.getSource("cut").setData(scan.cut_roads);
@@ -625,7 +651,7 @@ function redTxt(a) {                   // never shows "0" for an area where noth
 }
 function areaRow(k, a) {
   const sub = [k === "tantallon" ? "subset of HRM, not in the total" : k === "hrm" ? "contains Upper Tantallon" : "",
-               !a.pinned && a.prep_s >= 8 ? `first load ≈ ${a.prep_s} s` : "",
+               !a.pinned && !a.cached && a.open_s >= 8 ? `first load ≈ ${a.open_s} s (scan)` : "",
                a.available ? "" : "data missing"].filter(Boolean).join(" · ");
   return `<button class="arow${k === current ? " on" : ""}" data-area="${k}" data-q="${esc(fold(a.label + " " + (a.desc || "")))}"
     ${a.available ? "" : `disabled title="${esc(a.reason || "")}"`}><span class="an">${esc(a.label)}${sub ? `<small>${sub}</small>` : ""}</span>${redTxt(a)}</button>`;
@@ -1603,6 +1629,20 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
   },
   map, select, loadArea, clear: clearMitigation,
   areaGen: () => areaGen, areas: () => areas,
+  async idCheck() {   // our ids vs the ONLINE basemap's (fetched now) and vs the style actually loaded
+    let online = null;
+    try {
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
+      const st = await (await fetch(OFM_DARK, { signal: ctl.signal })).json(); clearTimeout(t);
+      online = { layers: st.layers.map((l) => l.id), sources: Object.keys(st.sources) };
+    } catch { /* offline: only the loaded style can be checked */ }
+    const clash = online ? [...OWN.layers.filter((id) => online.layers.includes(id) || online.sources.includes(id)).map((id) => `layer ${id}`),
+                            ...OWN.sources.filter((id) => online.sources.includes(id) || online.layers.includes(id)).map((id) => `source ${id}`)] : null;
+    return { basemapOnline: style !== OFFLINE_STYLE, onlineChecked: !!online, onlineLayers: online ? online.layers.length : 0,
+             ours: OWN.layers.length + OWN.sources.length, collisions: OWN.collisions.slice(), clashWithOnline: clash,
+             missing: OWN.layers.filter((id) => !map.getLayer(id)),
+             waterLayer: map.getLayer("egress-water") ? map.getLayer("egress-water").source : null };
+  },
   pickerState: () => ({ current, ready: areaReady, overview: $("overview").textContent.replace(/\s+/g, " ").trim(),
     on: [...document.querySelectorAll("#areas button.on, #areaList .arow.on")].map((b) => b.dataset.area),
     layersArea,

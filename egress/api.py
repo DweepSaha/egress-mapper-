@@ -13,6 +13,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from . import areacache
 from . import areas as registry
 from . import config, context, engine, fire, flood, probe, viz
 
@@ -70,9 +71,20 @@ def _check(area: str) -> None:
 
 
 def _build(area: str) -> dict:
+    """Load + scan an area. A non-pinned area is read from the disk cache when a valid entry exists (the saved output of
+    exactly this load + scan, see areacache.py), otherwise computed and saved. Pinned areas are always computed live."""
     t0 = time.time()
-    a = engine.load_area(area)
-    results = engine.scan(a)
+    cached = None if area in registry.PINNED else areacache.load(area)
+    if cached:
+        a, results = cached
+    else:
+        a = engine.load_area(area)
+        results = engine.scan(a)
+        if area not in registry.PINNED:
+            try:
+                areacache.save(area, a, results)
+            except OSError as e:               # a cache that cannot be written only costs time next visit
+                log.warning("area %s: scan cache not written (%s)", area, e)
     counts = {}
     for r in results:
         counts[r["status"]] = counts.get(r["status"], 0) + 1
@@ -81,7 +93,8 @@ def _build(area: str) -> dict:
     if counts != survey:     # the picker shows the survey counts: they must be what the map shows
         log.error("area %s: live scan counts %s differ from the survey %s", area, counts, survey)
     ws, peak = _mem_mb()
-    log.info("area %s loaded in %.0f s; memory %.0f MB (peak %.0f MB)", area, time.time() - t0, ws, peak)
+    log.info("area %s loaded in %.1f s (%s); memory %.0f MB (peak %.0f MB)", area, time.time() - t0,
+             "saved scan" if cached else "scanned", ws, peak)
     return dict(area=a, results=results, counts=counts, geo=engine.results_geojson(results),
                 roads=engine.roads_geojson(a), boundary=engine.boundary_geojson(a))
 
@@ -177,9 +190,33 @@ def water_bytes(area: str) -> bytes:
     return c["water"]
 
 
+CACHE_S_PER_MB = 0.16        # opening from the saved scan (read + GeoJSON + send): HRM, 21 MB, opened in 4.4 s here
+
+
+def _open_estimate(k: str, v: dict) -> tuple[bool, int | None]:
+    """(saved on disk?, seconds to open) for the picker's progress text. Pinned areas are resident."""
+    if not v["available"]:
+        return False, None
+    if k in registry.PINNED:
+        return True, 0
+    try:
+        p = areacache.path(k)
+        if p.exists():
+            return True, max(1, round(1 + p.stat().st_size / 1e6 * CACHE_S_PER_MB))
+    except OSError:
+        pass
+    return False, v["prep_s"]
+
+
 @app.get("/api/areas")
 def areas():
-    return AREAS
+    """The registry, plus whether each area's scan is saved on disk (opening it is then a read, not a scan) and an
+    estimate of the seconds to open it."""
+    out = {}
+    for k, v in AREAS.items():
+        cached, est = _open_estimate(k, v)
+        out[k] = {**v, "cached": cached, "open_s": est}
+    return out
 
 
 @app.get("/api/{area}/scan")

@@ -40,3 +40,12 @@ leaving the extract still ends artificially. Results near the extract boundary a
 - Rural OSM building coverage is very thin (Pointe-Sapin: 160 OSM vs 1,737 Microsoft), so the higher of the two
   counts is used and both are shown.
 - The elevation model covers the Fredericton river corridor only; NoData (−32767) is masked explicitly.
+
+## Saved scans (`cache/areas/`, generated)
+
+Opening a surveyed area that is not pinned reads its saved scan instead of re-running it (HRM: ~4 s instead of
+60-100 s). Each file is the pickled output of `engine.load_area` + `engine.scan` for exactly the current inputs; the
+file name carries a key over the engine and config source, the study box, the three input files (size + time) and the
+library versions, so any change makes the app scan again. Not committed; rebuild and verify with
+`python scripts/build_area_cache.py --all --verify` (re-scans each unpickled area and requires identical results,
+and matching survey counts). Tantallon and Fredericton are never cached: they are computed live at startup.

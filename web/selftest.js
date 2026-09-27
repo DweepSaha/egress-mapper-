@@ -276,7 +276,16 @@ async function demoSuite() {
     t.includes("234 lose access if the worst sampled blockage occurs") && t.includes("OSM 234 · Microsoft 194") &&
     t.includes("2 connections to major roads");
   const snap = () => JSON.parse(app.snapshot());
-  await app.loadArea("tantallon");
+  // D0 no layer/source id of ours clashes with the basemap (a clash silently drops our layer, e.g. mapped water online),
+  // and our mapped water actually renders on both demo areas (the Saint John River, St. Margarets Bay)
+  const waterShown = async () => { for (let i = 0; i < 50; i++) { await sleep(200); const n = app.map.querySourceFeatures("egress-water").length; if (n) return n; } return 0; };
+  const ids = await app.idCheck();
+  await app.loadArea("fredericton"); const wF = await waterShown();
+  await app.loadArea("tantallon"); const wT = await waterShown();
+  record("D0 no id clash with the basemap (loaded style and the online OpenFreeMap style); mapped water renders on Fredericton and Tantallon",
+    ids.collisions.length === 0 && (ids.clashWithOnline === null || ids.clashWithOnline.length === 0) && ids.missing.length === 0 &&
+    ids.waterLayer === "egress-water" && wF > 0 && wT > 0,
+    { ...ids, waterFeatures: { fredericton: wF, tantallon: wT } });
   app.select(99); await sleep(1500);
   const s0 = snap(), ch = app.selectedChoke();
   const chokeOk = ch && Math.abs(ch[0] - FROZEN_CHOKE[0]) < 1e-6 && Math.abs(ch[1] - FROZEN_CHOKE[1]) < 1e-6;
@@ -918,6 +927,21 @@ async function pickerSuite() {
   const r363 = rows.find((r) => r.t.includes("363 of 513"));
   record("PK11 Fredericton ranked list marks the single-source entry (363 of 513) and explains the tag",
     !!r363 && r363.one && rows.filter((r) => r.one).length >= 1 && P().overview.includes("only one footprint source"), { rows });
+
+  // PK13 loading state is never a frozen card: it says what the server is doing, counts seconds, and says so when late
+  const A = app.areas().antigonish, est0 = A.open_s;
+  scanDelays.push(3000);
+  const l1 = app.loadArea("antigonish"); await sleep(2200);
+  const t1 = P().overview;
+  await l1; await waitReady("antigonish");
+  await app.loadArea("tantallon");
+  A.open_s = 0; scanDelays.push(8000);                  // pretend the estimate was 0 s: the late notice must appear
+  const l2 = app.loadArea("antigonish"); await sleep(7000);
+  const t2 = P().overview;
+  await l2; await waitReady("antigonish"); A.open_s = est0;
+  record("PK13 loading card: states what the server does (saved scan / running the scan), elapsed seconds, and a late notice",
+    t1.includes("Preparing this area") && /(saved scan|Running the scan)/.test(t1) && /Preparing this area… [1-9]\d* s/.test(t1) &&
+    t2.includes("Taking longer than expected") && settled("antigonish"), { t1, t2 });
 
   // PK12 the picker: pinned first, province groups with counts, search, Tantallon/HRM overlap stated
   const pinned = [...document.querySelectorAll("#areas button")].map((b) => b.dataset.area);

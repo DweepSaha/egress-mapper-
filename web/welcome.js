@@ -55,17 +55,17 @@ map.setProjection({ type: "globe" });            // globe below z11, easing to m
 try { map.setSky({ "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, 1, 6, 1, 9, 0] }); } catch { /* optional */ }
 map.addSource("grat", { type: "geojson", data: graticule() });
 map.addLayer({ id: "grat", type: "line", source: "grat", paint: { "line-color": "#2a4258", "line-width": 0.8, "line-opacity": 0.9 } });
-map.addSource("roads", { type: "geojson", data: empty, attribution: "© OpenStreetMap contributors" });
+map.addSource("egress-roads", { type: "geojson", data: empty, attribution: "© OpenStreetMap contributors" });
 // glow: a wide blurred halo under a thin bright core; ways out (major roads) slightly brighter
-map.addLayer({ id: "roads-glow", type: "line", source: "roads", layout: { "line-cap": "round", "line-join": "round" },
+map.addLayer({ id: "roads-glow", type: "line", source: "egress-roads", layout: { "line-cap": "round", "line-join": "round" },
   paint: { "line-color": "#35c3ff", "line-opacity": ["interpolate", ["linear"], ["zoom"], 2, 0.5, 10, 0.25],
            "line-width": ["interpolate", ["linear"], ["zoom"], 2, 3, 8, 5, 13, 6], "line-blur": 3 } });
-map.addLayer({ id: "roads-core", type: "line", source: "roads", layout: { "line-cap": "round", "line-join": "round" },
+map.addLayer({ id: "roads-core", type: "line", source: "egress-roads", layout: { "line-cap": "round", "line-join": "round" },
   paint: { "line-color": ["case", ["get", "way_out"], "#e6f7ff", "#9fdcf5"],
            "line-width": ["interpolate", ["linear"], ["zoom"], 2, 0.6, 10, 1, 14, ["case", ["get", "way_out"], 2.2, 0.9]] } });
 // our road data for both study areas (already small; drawn whole)
 Promise.all(["tantallon", "fredericton"].map((a) => fetch(`/api/${a}/roads`).then((r) => r.json()).catch(() => empty)))
-  .then((fcs) => map.getSource("roads").setData({ type: "FeatureCollection", features: fcs.flatMap((f) => f.features) }));
+  .then((fcs) => map.getSource("egress-roads").setData({ type: "FeatureCollection", features: fcs.flatMap((f) => f.features) }));
 // the two study areas are a few pixels wide at globe zoom: a soft glowing dot at each (fades out as roads take over)
 map.addSource("sites", { type: "geojson", data: empty });
 map.addLayer({ id: "sites-glow", type: "circle", source: "sites", paint: { "circle-color": "#35c3ff", "circle-blur": 1,
