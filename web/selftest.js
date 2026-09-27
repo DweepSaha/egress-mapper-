@@ -18,6 +18,7 @@ const fireDelays = [];    // ... to /fire/ scenario responses
 const probeDelays = [];   // ... to /probe responses (user-placed blockage)
 const probeBodies = [];   // request bodies sent to /probe (the raw release point)
 const scanDelays = [];    // delays (ms) applied to /scan responses (area load)
+const failScan = new Set();   // areas whose /scan answers 500 (simulated server failure, picker suite)
 let apiCalls = 0;
 const urlLog = [];        // every request URL, in order (xarea suite)         // every /api/ request (the 3D suite asserts that toggling 2D/3D makes none)
 window.fetch = async (url, opts) => {
@@ -30,6 +31,8 @@ window.fetch = async (url, opts) => {
       return resp;
     }
   }
+  const failed = [...failScan].find((a) => String(url).includes(`/api/${a}/scan`));
+  if (failed) return new Response(JSON.stringify({ detail: "simulated failure" }), { status: 500, headers: { "Content-Type": "application/json" } });
   if (String(url).includes("/scan")) {
     const d = scanDelays.length ? scanDelays.shift() : 0;
     const resp = await realFetch(url, opts);
@@ -259,6 +262,8 @@ async function viewSuite() {
   app.unfire();
   await app.loadArea("fredericton");
   await app.flood(8.36); await until(() => app.floodState().cardState === "done");
+  // the card grows once the footprints are coloured: snapshot only after that (as the flood suite's waitBld does)
+  await until(() => app.floodState().bldReady && app.floodState().bldStates > 0); await sleep(300);
   await roundTrip("flood 8.36");
   app.unflood();
 }
@@ -783,6 +788,159 @@ async function probeRadiusSuite() {
   app.probeReset();
 }
 
+async function pickerSuite() {
+  // area picker: 30 surveyed areas loaded on demand. Failure cases first (in-flight, overlapping, unknown, failed,
+  // rapid, mid-drag/scenario, nothing assessed), then availability, the ranked-list marker and the list itself.
+  const P = () => app.pickerState();
+  const settled = (name) => { const s = P(); return s.current === name && s.ready && s.layersArea === name && s.on.every((k) => k === name) && s.on.length >= 1; };
+  const waitReady = async (name, ms = 60000) => { for (let t = 0; t < ms && !settled(name); t += 200) await sleep(200); return settled(name); };
+  const label = (k) => app.areas()[k].label;
+  const scanReqs = () => urlLog.filter((u) => u.includes("/scan"));
+
+  // PK1 a new area is chosen while the previous area's scan response is still in flight
+  await app.loadArea("tantallon"); await sleep(300);
+  scanDelays.push(2500);
+  const pA = app.loadArea("sackville"); await sleep(150);
+  const pB = app.loadArea("caraquet");
+  await Promise.all([pA, pB]); await sleep(300);
+  const s1 = P();
+  record("PK1 new area while a scan is in flight: only the newest area renders", settled("caraquet") &&
+    s1.overview.includes(label("caraquet")) && !s1.overview.includes(label("sackville")), s1);
+
+  // PK2 A -> B -> A: the late first response of A must not re-render over the newer A (and clear a selection)
+  scanDelays.push(2500);
+  const q1 = app.loadArea("sackville"); await sleep(100);
+  const q2 = app.loadArea("tantallon"); await sleep(100);
+  await app.loadArea("sackville");
+  const nid = app.topNid(); app.select(nid); await sleep(300);
+  const gSel = JSON.parse(app.snapshot()).selected;
+  await Promise.all([q1, q2]); await sleep(300);
+  record("PK2 A -> B -> A: an older load of the same area cannot re-render or clear the selection",
+    nid !== null && gSel === nid && JSON.parse(app.snapshot()).selected === nid && settled("sackville"), { nid, gSel, after: JSON.parse(app.snapshot()).selected });
+
+  // PK3 rapid repeated switching (pinned and on-demand areas mixed), nothing awaited in between
+  const seq = ["tantallon", "fredericton", "sackville", "caraquet", "tantallon", "montague", "fredericton", "st_stephen", "tantallon"];
+  const ps = [];
+  for (const k of seq) { ps.push(app.loadArea(k)); await sleep(40); }
+  await Promise.all(ps); await sleep(400);
+  const s3 = P();
+  app.select(99); await sleep(1200);
+  const panel = JSON.parse(app.snapshot());
+  record("PK3 rapid switching through 9 areas ends on the last, fully rendered, and usable", settled("tantallon") &&
+    s3.overview.includes(label("tantallon")) && panel.selected === 99 && !panel.panelHidden, { s3, sel: panel.selected });
+
+  // PK4 two on-demand areas requested back to back (the server loads one at a time; the latest wins)
+  const m1 = app.loadArea("miramichi"); await sleep(60);
+  const m2 = app.loadArea("bathurst");
+  await Promise.all([m1, m2]); const okB = await waitReady("bathurst");
+  record("PK4 an area selected while another is still loading: the later one is shown", okB &&
+    P().overview.includes(label("bathurst")), P());
+
+  // PK5 unknown area (e.g. a stale link): a clear message, no stale layers, and the picker still works
+  await app.loadArea("nowhere"); await sleep(200);
+  const s5 = P();
+  const ok5 = !s5.ready && s5.layersArea === null && s5.overview.includes("could not be loaded") && s5.tabs.every(([m, dis]) => m === "vuln" || dis);
+  await app.loadArea("tantallon");
+  record("PK5 unknown area: 'could not be loaded', nothing stale on the map, scenarios disabled, recovery works",
+    ok5 && settled("tantallon"), { s5 });
+
+  // PK6 an area whose data fails on the server: reason shown, Retry recovers
+  failScan.add("sackville");
+  await app.loadArea("sackville"); await sleep(200);
+  const s6 = P();
+  failScan.delete("sackville");
+  document.getElementById("areaRetry").click(); const ok6 = await waitReady("sackville");
+  record("PK6 server failure: reason shown, no stale layers, Try again loads the area",
+    !s6.ready && s6.layersArea === null && s6.overview.includes("simulated failure") && ok6, { s6 });
+
+  // PK7 an area with zero assessed neighbourhoods (Pointe-Sapin): a sensible overview, never "0 red", fire still works
+  await app.loadArea("pointe_sapin"); const ok7 = await waitReady("pointe_sapin");
+  const s7 = P();
+  const psRow = document.querySelector('#areaList .arow[data-area="pointe_sapin"]').textContent;
+  const PS = app.areas().pointe_sapin.center;
+  app.fire("hyp", PS, 800);
+  for (let i = 0; i < 150 && app.fireState().cardState !== "done"; i++) await sleep(200);
+  const f7 = app.fireState();
+  record("PK7 Pointe-Sapin (nothing assessed): explains why, 'not assessed does not mean safe', listed as 'none assessed', fire works",
+    ok7 && s7.overview.includes("Nothing could be assessed") && s7.overview.includes("Not assessed does not mean safe") &&
+    psRow.includes("none assessed") && !/\b0\b/.test(psRow.replace(/Pointe-Sapin, NB/, "")) &&
+    f7.on && f7.cardState === "done" && app.fireDataArea() === "pointe_sapin", { overview: s7.overview.slice(0, 200), psRow, fire: f7.cardState });
+  app.unfire();
+
+  // PK8 scenario availability: unavailable scenarios stay visible, disabled, with the reason
+  await app.loadArea("truro"); await waitReady("truro");
+  const s8 = P(); const tab = Object.fromEntries(s8.tabs.map(([m, d, u]) => [m, { d, u }]));
+  app.fire("hist"); await sleep(300);
+  const histMode = app.fireState().mode; app.unfire();
+  await app.loadArea("fredericton"); await sleep(300);
+  const s8f = P(); const tabF = Object.fromEntries(s8f.tabs.map(([m, d, u]) => [m, { d, u }]));
+  await app.loadArea("tantallon"); await sleep(300);
+  const s8t = P();
+  record("PK8 availability: flood/historical visibly unavailable with reasons; hypothetical fire everywhere",
+    tab.flood.d && tab.flood.u && !tab.fire.d && !tab.fire.u && s8.scenWhy.includes("Fredericton only") &&
+    s8.histWhy.includes("Upper Tantallon") && histMode === "hyp" &&
+    !tabF.flood.d && !tabF.flood.u && s8f.histWhy.includes("Upper Tantallon") &&
+    s8t.histWhy === "" && s8t.scenWhy.includes("Flood") && !s8t.scenWhy.includes("Fire:"),
+    { truro: [s8.tabs, s8.scenWhy, s8.histWhy], fred: s8f.tabs, tan: [s8t.scenWhy, s8t.histWhy] });
+
+  // PK9 switching area mid-drag (blockage and fire) cancels the drag: no request, panning restored, nothing carried
+  await app.loadArea("tantallon"); app.select(99); await sleep(1500);
+  urlLog.length = 0; const nProbe = probeBodies.length;
+  const dragged = app.probeDragStart(); app.probeDragMove(-63.8745, 44.7285);
+  await app.loadArea("fredericton"); await sleep(400);
+  const probeReqs = probeBodies.length - nProbe;
+  const panOk1 = app.map.dragPan.isEnabled();
+  app.fire("hyp", [-66.645, 45.958], 500);
+  for (let i = 0; i < 150 && app.fireState().cardState !== "done"; i++) await sleep(200);
+  const fdr = app.fireDragStart(); app.fireDragMove(-66.65, 45.96);
+  urlLog.length = 0;
+  await app.loadArea("tantallon"); await sleep(600);
+  const fi = await app.fireInfo();
+  record("PK9 area switch mid-drag: blockage and fire drags cancelled, no request sent, panning restored",
+    dragged && probeReqs === 0 && panOk1 && fdr && !fi.dragging && !app.fireState().on &&
+    !urlLog.some((u) => u.includes("/fire/")) && app.map.dragPan.isEnabled() && settled("tantallon"),
+    { dragged, probeReqs, fdr, fire: app.fireState().on, urls: urlLog.slice() });
+
+  // PK10 switching area mid-scenario and mid-transition: scenario closed, no saved view carried, layers consistent
+  app.select(99); await sleep(800);
+  app.fire("hist"); await sleep(50);                    // scenario entry still in progress
+  await app.loadArea("fredericton"); await sleep(300);
+  const FIREL = ["fi-zone", "fi-zone-line", "fi-cut", "fi-roads"], SCANL = ["choke", "blocked", "blocked-hatch", "blocked-edge", "cut"];
+  await app.flood(8.36); await sleep(100);
+  await app.loadArea("sackville"); await waitReady("sackville");
+  record("PK10 area switch mid-scenario: scenarios off, nothing carried, scan layers back, flood/fire layers off",
+    !app.fireState().on && !app.floodState().on && app.scenSaved() === null && JSON.parse(app.snapshot()).selected === null &&
+    FIREL.every(off) && SCANL.every(on) && settled("sackville"), {});
+
+  // PK11 ranked list: single-source neighbourhoods are marked inline (Fredericton #3: OSM 11 / Microsoft 513)
+  await app.loadArea("fredericton"); await sleep(300);
+  const rows = [...document.querySelectorAll("#overview .toprow")].map((b) => ({ t: b.textContent.replace(/\s+/g, " ").trim(), one: !!b.querySelector(".one") }));
+  const r363 = rows.find((r) => r.t.includes("363 of 513"));
+  record("PK11 Fredericton ranked list marks the single-source entry (363 of 513) and explains the tag",
+    !!r363 && r363.one && rows.filter((r) => r.one).length >= 1 && P().overview.includes("only one footprint source"), { rows });
+
+  // PK12 the picker: pinned first, province groups with counts, search, Tantallon/HRM overlap stated
+  const pinned = [...document.querySelectorAll("#areas button")].map((b) => b.dataset.area);
+  const heads = [...document.querySelectorAll("#areaList .agh")].map((h) => h.textContent.replace(/\s+/g, " ").trim());
+  const nRows = document.querySelectorAll("#areaList .arow").length;
+  const inp = document.getElementById("areaSearch");
+  inp.value = "SACK"; inp.dispatchEvent(new Event("input"));
+  const vis = [...document.querySelectorAll("#areaList .arow:not(.hidden)")].map((b) => b.dataset.area);
+  inp.value = "zzz"; inp.dispatchEvent(new Event("input"));
+  const none = !document.querySelector("#areaList .anone").classList.contains("hidden");
+  inp.value = ""; inp.dispatchEvent(new Event("input"));
+  const hrmRow = document.querySelector('#areaList .arow[data-area="hrm"]').textContent;
+  const tanRow = document.querySelector('#areaList .arow[data-area="tantallon"]').textContent;
+  record("PK12 picker: Tantallon + Fredericton pinned first; NB 17 / NS 10 / PEI 3 with red totals; search (Sackville also finds HRM, which contains Lower Sackville); overlap stated",
+    pinned.join() === "tantallon,fredericton" && nRows === 31 &&
+    heads[0].includes("New Brunswick") && heads[0].includes("17 areas · 202 red") &&
+    heads[1].includes("Nova Scotia") && heads[1].includes("10 areas · 340 red") &&
+    heads[2].includes("Prince Edward Island") && heads[2].includes("3 areas · 29 red") &&
+    vis.join() === "sackville,hrm" && none && hrmRow.includes("contains Upper Tantallon") && tanRow.includes("subset of HRM") &&
+    document.getElementById("areaMore").textContent.includes("not counted separately"),
+    { pinned, heads, nRows, vis, hrmRow, tanRow });
+}
+
 async function main() {
   const q = new URLSearchParams(location.search);
   if (q.get("selftest") === "flood") return floodSuite();
@@ -795,6 +953,7 @@ async function main() {
   if (q.get("selftest") === "firedrag") return fireDragSuite();
   if (q.get("selftest") === "trans") return transSuite();
   if (q.get("selftest") === "proberadius") return probeRadiusSuite();
+  if (q.get("selftest") === "picker") return pickerSuite();
   if (q.get("road")) {                                               // 5. deep link -> Clear
     for (let i = 0; i < 100 && app.state().cardState !== "done"; i++) await sleep(200);
     const before = app.state();

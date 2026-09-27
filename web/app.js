@@ -24,12 +24,19 @@ async function pickStyle() {
 }
 
 const areas = await (await fetch("/api/areas")).json();
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+// deep link ?area=: an unknown name opens the first pinned area and says so (never a blank screen)
+const WANT = QS.get("area");
+const HOME = Object.keys(areas)[0];                   // the server lists pinned areas first (Upper Tantallon)
+const INITIAL = WANT && areas[WANT] ? WANT : HOME;
+let areaNotice = WANT && !areas[WANT] ? `There is no study area called “${esc(WANT)}”. Showing ${esc(areas[HOME].label)} instead.` : null;
 const style = await pickStyle();
 const stB = document.getElementById("stBasemap");
 stB.className = `st ${style === OFFLINE_STYLE ? "off" : "on"}`;
 stB.textContent = style === OFFLINE_STYLE ? "Basemap off (offline mode)" : "Basemap online";
-const map = new maplibregl.Map({ container: "map", style, center: areas.tantallon.center,
-  zoom: areas.tantallon.zoom, attributionControl: { compact: false } });
+const VIEW0 = areas[INITIAL].center ? areas[INITIAL] : areas[HOME];
+const map = new maplibregl.Map({ container: "map", style, center: VIEW0.center,
+  zoom: VIEW0.zoom, attributionControl: { compact: false } });
 map.addControl(new maplibregl.NavigationControl(), "top-right");
 map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
 await new Promise((r) => map.once("load", r));
@@ -255,13 +262,19 @@ const exitHow = (h) => (h === true || h === undefined ? "restore" : h === false 
 
 let current = null, scanData = null, selected = null;
 let areaReady = false;       // false while loadArea() is fetching; scenario and probe entry wait for it
+// areaGen: the area-load generation, used where loadArea() used to compare names. A name alone cannot tell an old load
+// from a newer load of the SAME area (A -> B -> A), whose late first response would otherwise re-render and clear a
+// selection made in the meantime. Same mechanism as floodGen / fireGen / probeGen.
+let areaGen = 0;
+let layersArea = null;       // the area whose scan layers are on the map (null while cleared / loading)
 let drawing = false, clicks = [];
 let floodOn = false, floodGen = 0, floodData = null, floodInfo = null;
 let bldStateN = 0, coverFeatures = 0, floodAct = 0, coverInstalled = false;
 let bldGen = 0, bldAppliedNs = null;
 // Displayed footprint ids are namespaced per (area, source) so a category id from one source/area can never match a
 // polygon from another, even if MapLibre finishes processing sources out of order. Server ids and counts unchanged.
-const BLD_NS = (area, src) => ((area === "fredericton" ? 2 : 0) + (src === "ms" ? 1 : 0)) * 1e7;
+const AREA_IDX = Object.fromEntries(Object.keys(areas).map((k, i) => [k, i]));
+const BLD_NS = (area, src) => ((AREA_IDX[area] ?? 0) * 2 + (src === "ms" ? 1 : 0)) * 1e7;
 const bldTest = { completeDelays: [] };         // test-only: delay the post-processing step to simulate a slow worker
 const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
 // Resolves once MapLibre has finished processing THIS update of the bld source. sourcedata events don't identify which
@@ -457,14 +470,23 @@ function renderOverview() {
     ? `<i class="s-${k}" style="width:${(n(k) / (total || 1)) * 100}%"></i>` : "").join("");
   const leg = [["red", "30+ cut off"], ["amber", "1–29 cut off"], ["green", "none cut off"], ["not_assessed", "not assessed"]]
     .map(([k, l]) => `<div><span class="k s-${k}"></span><b>${n(k)}</b> ${l}</div>`).join("");
-  const top = ranked.slice(0, 5).map((f) => {
+  const minH = scanData.summary.min_homes;
+  // one source only: the neighbourhood reaches 30+ mapped buildings in one footprint source but not the other
+  const oneSrc = (q) => Math.min(q.homes_osm, q.homes_ms) < minH;
+  const oneTag = (q) => `<span class="one" title="OpenStreetMap maps ${N(q.homes_osm)} buildings here, Microsoft ${N(q.homes_ms)}: only one source sees ${minH}+">1 source</span>`;
+  const top5 = ranked.slice(0, 5);
+  const top = top5.map((f) => {
     const q = f.properties;
     return `<button class="toprow" data-nid="${f.id}"><span class="tr">#${q.rank}</span>
       <span class="tb"><i style="width:${(q.worst_cut / Math.max(q.homes, 1)) * 100}%"></i></span>
-      <span class="tn"><b>${N(q.worst_cut)}</b> of ${N(q.homes)}</span></button>`;
+      <span class="tn"><b>${N(q.worst_cut)}</b> of ${N(q.homes)}${oneSrc(q) ? oneTag(q) : ""}</span></button>`;
   }).join("");
+  const oneNote = top5.some((f) => oneSrc(f.properties)) || (lead && oneSrc(lead))
+    ? `<div class="fine one-note"><span class="one">1 source</span> only one footprint source (OpenStreetMap or Microsoft) maps
+       ${minH}+ buildings in that neighbourhood, so its count rests on that source alone.</div>` : "";
+  const noneAssessed = total > 0 && assessed === 0;
   el.innerHTML = `<div class="kicker">Area overview</div>
-    <div class="big">${areas[current].label}</div>
+    <div class="big">${areas[current].label}</div>${noticeHtml()}
     <div class="mgrid2">
       ${metric(N(total), "neighbourhoods of 30+ mapped buildings")}
       ${metric(N(assessed), "assessed", "", `${N(n("not_assessed"))} not assessed (edge of road data)`)}
@@ -472,14 +494,59 @@ function renderOverview() {
     <div class="blk"><div class="bh">Vulnerability status</div><div class="dist tall">${seg}</div><div class="leg">${leg}</div></div>
     ${lead ? `<div class="blk"><div class="bh">Largest sampled blockage impact</div>
       ${metric(N(lead.worst_cut), `mapped buildings cut off by one blocked road area (of ${N(lead.homes)} in that neighbourhood)`,
-               "cut", pairTxt(lead.worst_cut_osm, lead.worst_cut_ms))}</div>` : ""}
-    <div class="blk"><div class="bh">Most vulnerable neighbourhoods</div>
+               "cut", pairTxt(lead.worst_cut_osm, lead.worst_cut_ms))}${oneSrc(lead) ? oneTag(lead) : ""}</div>` : ""}
+    ${total === 0 ? `<div class="blk"><div class="bh">Neighbourhoods</div>
+      <div class="fine">No neighbourhood of ${minH}+ mapped buildings in this study area, so nothing is assessed here.</div></div>`
+    : noneAssessed ? `<div class="blk na-only"><div class="bh">Nothing could be assessed here</div>
+      <div class="fine">Every neighbourhood of ${minH}+ mapped buildings in this study area lies within 2 km of the edge of
+        the prepared road data, where a blocked road could have a way out that the data does not show. They are shown
+        grey. <b>Not assessed does not mean safe.</b></div></div>`
+    : `<div class="blk"><div class="bh">Most vulnerable neighbourhoods</div>
       <div class="fine">Mapped buildings cut off by the worst sampled blockage, of the neighbourhood total. Click to open.</div>
-      ${top || `<div class="fine">None.</div>`}</div>`;
+      ${top || `<div class="fine">None.</div>`}${oneNote}</div>`}`;
   el.querySelectorAll(".toprow").forEach((b) => (b.onclick = () => select(+b.dataset.nid)));
 }
 
+const AREA_SRCS = ["roads", "boundary", "nb", "streets", "cut", "blocked", "choke"];
+async function getJSON(url) {           // fetch + JSON; a non-2xx answer throws with the server's reason
+  const r = await fetch(url);
+  if (!r.ok) {
+    let why = `HTTP ${r.status}`;
+    try { why = (await r.json()).detail || why; } catch { /* not JSON */ }
+    throw new Error(why);
+  }
+  return r.json();
+}
+function noticeHtml() { return areaNotice ? `<div class="warn area-notice">${areaNotice}</div>` : ""; }
+let loadTick = null;
+function renderAreaPending(name, gen, err = null) {   // overview while an area loads, or why it could not
+  clearInterval(loadTick); loadTick = null;
+  const a = areas[name], el = $("overview");
+  const label = a ? esc(a.label) : esc(name);
+  $("stSummary").innerHTML = `<b>${label}</b> · ${err ? "not loaded" : "preparing…"}`;
+  if (err) {
+    el.innerHTML = `<div class="kicker">Area overview</div><div class="big">${label}</div>${noticeHtml()}
+      <div class="blk load-err"><div class="bh">This area could not be loaded</div><div class="fine">${esc(err)}</div>
+      <button id="areaRetry" class="probe-reset">Try again</button></div>`;
+    $("areaRetry").onclick = () => loadArea(name);
+    return;
+  }
+  const slow = a && !a.pinned && a.prep_s >= 8;
+  const t0 = Date.now();
+  const draw = () => {
+    const s = Math.round((Date.now() - t0) / 1000);
+    el.innerHTML = `<div class="kicker">Area overview</div><div class="big">${label}</div>${noticeHtml()}
+      <div class="blk loading"><div class="bh">Preparing this area…${slow ? ` ${s} s` : ""}</div>
+      ${slow ? `<div class="fine">The first visit runs the scan on the server: about ${a.prep_s} s for this area. It stays
+        loaded until you open another area outside the two pinned ones.</div>` : ""}</div>`;
+  };
+  draw();
+  if (slow) loadTick = setInterval(() => (gen === areaGen ? draw() : clearInterval(loadTick)), 1000);
+}
+
 async function loadArea(name) {
+  const gen = ++areaGen;
+  if (gesture) gestureUp(null);           // an open drag is cancelled (as with Esc) before anything changes
   areaReady = false;                      // until THIS area's data is rendered, no scenario/probe state may start
   if (floodOn) exitFlood("discard");      // switching areas always clears the flood scenario
   if (fireOn) exitFire("discard");        // ...and the fire scenario
@@ -490,24 +557,47 @@ async function loadArea(name) {
   bldGen++; bldAppliedNs = null;                 // any in-flight footprint load for the old area becomes stale
   map.getSource("bld").setData(empty); bldShown = { area: null, src: null, ready: false };
   map.getSource("water").setData(empty);
+  // the old area leaves the map now: nothing from it can be clicked or selected while the new one loads
+  clearProbe();
+  if (selected !== null) map.setFeatureState({ source: "streets", id: selected }, { selected: false });
+  selected = null;
+  document.getElementById("panel").classList.add("hidden");
+  AREA_SRCS.forEach((k) => map.getSource(k).setData(empty)); layersArea = null;
   current = name;
   syncMode();
   if (typeof clearMitigation === "function") clearMitigation();
-  document.querySelectorAll("#areas button").forEach((b) => b.classList.toggle("on", b.dataset.area === name));
-  const [scan, roads, boundary] = await Promise.all(
-    ["scan", "roads", "boundary"].map((k) => fetch(`/api/${name}/${k}`).then((r) => r.json())));
-  if (current !== name) return;
+  if (gen > 1) areaNotice = null;          // a deep-link notice belongs to the first load only
+  renderPicker();
+  renderAreaPending(name, gen);
+  const a = areas[name];
+  if (a && a.center) {                     // frame the area now, so a slow first load shows where it is
+    if (firstFrame) { firstFrame = false; map.jumpTo({ center: a.center, zoom: a.zoom }); }
+    else map.flyTo({ center: a.center, zoom: a.zoom, duration: dur(900) });
+  }
+  let scan, roads, boundary;
+  try {
+    if (!a) throw new Error(`There is no study area called “${name}”.`);
+    if (!a.available) throw new Error(a.reason);
+    scan = await getJSON(`/api/${name}/scan`);        // opening the area (the server loads it if needed)...
+    if (gen !== areaGen) return;
+    [roads, boundary] = await Promise.all(["roads", "boundary"].map((k) => getJSON(`/api/${name}/${k}`)));   // ...then its layers
+  } catch (e) {
+    if (gen === areaGen) renderAreaPending(name, gen, e.message);
+    return;
+  }
+  if (gen !== areaGen) return;
+  clearInterval(loadTick); loadTick = null;
   scanData = scan;
   loadBuildings(name, "osm");   // subtle background footprints; loads after the roads, never blocks them
-  fetch(`/api/${name}/water`).then((r) => r.json())
-    .then((w) => { if (current === name) map.getSource("water").setData(w); }).catch(() => {});   // context only
+  fetch(`/api/${name}/water`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((w) => { if (gen === areaGen) map.getSource("water").setData(w); }).catch(() => {});   // context only
   map.getSource("roads").setData(roads);
   map.getSource("boundary").setData(boundary);
   map.getSource("nb").setData(scan.neighbourhoods);
   map.getSource("streets").setData(scan.streets);
   map.getSource("cut").setData(scan.cut_roads);
   map.getSource("blocked").setData(scan.blocked);
-  map.getSource("choke").setData(scan.chokepoints);
+  map.getSource("choke").setData(scan.chokepoints); layersArea = name;
   selected = null;
   setStreetsLook(false); streetsDim(false, 0);
   fade(SCAN_OVERLAYS, true, 0); fade(FLOOD_FADE, false, 0); fade(FIRE_LAYERS, false, 0);   // area switch: snap
@@ -522,13 +612,50 @@ async function loadArea(name) {
   syncMode();
   for (const k in shownNum) delete shownNum[k];          // numbers never "settle" across areas
   attention(null);                                       // no ring carried across areas
-  if (firstFrame) { firstFrame = false; map.jumpTo({ center: areas[name].center, zoom: areas[name].zoom }); }
-  else map.flyTo({ center: areas[name].center, zoom: areas[name].zoom, duration: dur(900) });
 }
 
-document.getElementById("areas").innerHTML = Object.entries(areas)
-  .map(([k, v]) => `<button data-area="${k}">${v.label}</button>`).join("");
-document.querySelectorAll("#areas button").forEach((b) => (b.onclick = () => loadArea(b.dataset.area)));
+// ---------- area picker: pinned demo areas first, then every surveyed area by province (survey red counts) ----------
+const PROV_NAME = { NB: "New Brunswick", NS: "Nova Scotia", PEI: "Prince Edward Island" };
+const fold = (t) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function redTxt(a) {                   // never shows "0" for an area where nothing could be assessed
+  if (!a.survey) return `<span class="ar na">no data</span>`;
+  const assessed = a.survey.neighbourhoods - a.survey.not_assessed;
+  if (!assessed) return `<span class="ar na" title="No neighbourhood here could be assessed">none assessed</span>`;
+  return `<span class="ar" title="${a.survey.red} red of ${assessed} assessed neighbourhoods"><i class="dot red"></i>${a.survey.red}</span>`;
+}
+function areaRow(k, a) {
+  const sub = [k === "tantallon" ? "subset of HRM, not in the total" : k === "hrm" ? "contains Upper Tantallon" : "",
+               !a.pinned && a.prep_s >= 8 ? `first load ≈ ${a.prep_s} s` : "",
+               a.available ? "" : "data missing"].filter(Boolean).join(" · ");
+  return `<button class="arow${k === current ? " on" : ""}" data-area="${k}" data-q="${esc(fold(a.label + " " + (a.desc || "")))}"
+    ${a.available ? "" : `disabled title="${esc(a.reason || "")}"`}><span class="an">${esc(a.label)}${sub ? `<small>${sub}</small>` : ""}</span>${redTxt(a)}</button>`;
+}
+function renderPicker() {
+  const pinned = Object.entries(areas).filter(([, a]) => a.pinned);
+  $("areas").innerHTML = pinned.map(([k, a]) => `<button data-area="${k}" class="${k === current ? "on" : ""}"
+    ${a.available ? "" : "disabled"}><span class="an">${esc(a.label)}<small>${esc(a.desc || "")}</small></span>${redTxt(a)}</button>`).join("");
+  const groups = Object.keys(PROV_NAME).map((pv) => {
+    const rows = Object.entries(areas).filter(([, a]) => a.province === pv);
+    const counted = rows.filter(([k]) => k !== "tantallon");          // Tantallon is inside HRM: counted once
+    const red = counted.reduce((t, [, a]) => t + (a.survey ? a.survey.red : 0), 0);
+    return `<div class="agrp" data-prov="${pv}"><div class="agh">${PROV_NAME[pv]}<span>${counted.length} areas · ${red} red</span></div>
+      ${rows.map(([k, a]) => areaRow(k, a)).join("")}</div>`;
+  }).join("");
+  $("areaList").innerHTML = groups + `<div class="fine anone hidden">No area matches.</div>`;
+  document.querySelectorAll("#areas button, #areaList .arow").forEach((b) => (b.onclick = () => loadArea(b.dataset.area)));
+  filterPicker();
+}
+function filterPicker() {
+  const t = fold($("areaSearch").value.trim());
+  let any = false;
+  document.querySelectorAll("#areaList .agrp").forEach((g) => {
+    let n = 0;
+    g.querySelectorAll(".arow").forEach((b) => { const hit = !t || b.dataset.q.includes(t); b.classList.toggle("hidden", !hit); n += hit; });
+    g.classList.toggle("hidden", !n); any = any || n > 0;
+  });
+  document.querySelector("#areaList .anone").classList.toggle("hidden", any);
+}
+
 
 // ---------- mitigation test ----------
 const fc = (features) => ({ type: "FeatureCollection", features });
@@ -1316,15 +1443,26 @@ function syncMode() {
   const mode = floodOn ? "flood" : fireOn ? "fire" : (drawing || proposalCount > 0) ? "mit" : "vuln";
   const chip = $("ctxMode");
   chip.className = `chip mode-${mode}`; chip.textContent = MODE_LABEL[mode];
-  $("ctxArea").textContent = current ? areas[current].label : "";
+  $("ctxArea").textContent = current ? (areas[current] ? areas[current].label : current) : "";
+  // an unavailable scenario stays visible, disabled, with the reason (buttons never appear and disappear)
+  const why = (current && areas[current] && areas[current].scenario_why) || {};
+  const SCEN = { flood: "flood", fire: "fire_hyp" };
   document.querySelectorAll("#modes button").forEach((b) => {
     b.classList.toggle("on", b.dataset.mode === (mode === "mit" ? "vuln" : mode));
-    if (b.dataset.mode === "flood") b.classList.toggle("hidden", !can(current, "flood"));     // Fredericton only
-    if (b.dataset.mode === "fire") b.classList.toggle("hidden", !can(current, "fire_hyp"));   // both areas
-    b.disabled = b.dataset.mode !== "vuln" && !areaReady;                                     // wait for the area load
+    const k = SCEN[b.dataset.mode], ok = !k || can(current, k);
+    b.classList.toggle("unavail", !ok);
+    b.title = ok ? "" : why[k] || "Not available for this area";
+    b.disabled = b.dataset.mode !== "vuln" && (!areaReady || !ok);                           // wait for the area load
   });
+  const scenWhy = [["Flood", "flood"], ["Fire", "fire_hyp"]].filter(([, k]) => current && !can(current, k))
+    .map(([l, k]) => `<div><b>${l}:</b> ${esc(why[k] || "not available for this area")}</div>`).join("");
+  $("scenWhy").innerHTML = scenWhy; $("scenWhy").classList.toggle("hidden", !scenWhy);
   const histBtn = document.querySelector('#fireModes [data-mode="hist"]');
-  if (histBtn) histBtn.classList.toggle("hidden", !can(current, "fire_hist"));              // Tantallon only
+  if (histBtn) {                                                                            // Tantallon only
+    const ok = can(current, "fire_hist");
+    histBtn.classList.toggle("unavail", !ok); histBtn.disabled = !ok; histBtn.title = ok ? "" : why.fire_hist || "";
+    $("histWhy").textContent = ok ? "" : why.fire_hist || ""; $("histWhy").classList.toggle("hidden", ok);
+  }
   $("vulnBox").classList.toggle("hidden", floodOn || fireOn);
   $("floodBox").classList.toggle("hidden", !floodOn);
   $("fireBox").classList.toggle("hidden", !fireOn);
@@ -1346,7 +1484,7 @@ document.querySelectorAll("#modes button").forEach((b) => (b.onclick = () => {
   else if (m === "flood") { if (!areaReady || !can(current, "flood")) return; if (fireOn) exitFire("handoff"); if (!floodOn) enterFlood(); }
   else if (m === "fire") { if (!areaReady || !can(current, "fire_hyp")) return; if (floodOn) exitFlood("handoff"); if (!fireOn) enterFire(); }
 }));
-$("resetView").onclick = () => current && map.flyTo({ center: areas[current].center, zoom: areas[current].zoom,
+$("resetView").onclick = () => current && areas[current] && areas[current].center && map.flyTo({ center: areas[current].center, zoom: areas[current].zoom,
                                                         pitch: view === "3d" ? PITCH_3D : 0, bearing: view === "3d" ? BEARING_3D : 0, duration: dur(800) });
 
 // ---------- 2D / 3D: two views of the SAME current result. Only the camera and the building layer change: no request,
@@ -1416,9 +1554,16 @@ map.on("mouseleave", "nb-fill", () => (map.getCanvas().style.cursor = ""));
 
 // deep links: ?area=fredericton&nid=99 opens an area with a neighbourhood selected
 const q = new URLSearchParams(location.search);
-await loadArea(areas[q.get("area")] ? q.get("area") : "tantallon");
+$("areaSearch").oninput = filterPicker;
+$("areaSearch").onkeydown = (e) => {
+  if (e.key === "Escape") { e.target.value = ""; filterPicker(); }
+  if (e.key === "Enter") { const b = document.querySelector("#areaList .arow:not(.hidden):not([disabled])"); if (b) b.click(); }
+};
+$("areaCount").textContent = `(${Object.keys(areas).filter((k) => k !== "tantallon").length})`;
+if (!areas[INITIAL].pinned) $("areaMore").open = true;    // a deep link outside the pinned areas shows where it is
+await loadArea(INITIAL);
 if (q.get("view") === "3d") setView("3d", false);   // before &nid: an instant camera change would cancel its zoom
-if (q.get("nid")) select(+q.get("nid"));
+if (q.get("nid") && areaReady && current === INITIAL) select(+q.get("nid"));
 // scripted demo / backup: &road=lonA,latA,lonB,latB runs the same mitigation path as two map clicks
 if (q.get("road")) {
   const v = q.get("road").split(",").map(Number);
@@ -1457,6 +1602,13 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
              loadedByNs: byNs, loaded: seen.size, wrongStates: wrong.length, wrongSample: wrong.slice(0, 3) };
   },
   map, select, loadArea, clear: clearMitigation,
+  areaGen: () => areaGen, areas: () => areas,
+  pickerState: () => ({ current, ready: areaReady, overview: $("overview").textContent.replace(/\s+/g, " ").trim(),
+    on: [...document.querySelectorAll("#areas button.on, #areaList .arow.on")].map((b) => b.dataset.area),
+    layersArea,
+    scenWhy: $("scenWhy").textContent.replace(/\s+/g, " ").trim(), histWhy: $("histWhy").textContent,
+    tabs: [...document.querySelectorAll("#modes button")].map((b) => [b.dataset.mode, b.disabled, b.classList.contains("unavail")]),
+    oneSource: document.querySelectorAll("#overview .toprow .one").length }),
   propose(a, b) { clearMitigation(); clicks = [a, b]; return runMitigation(); },
   flood: (g) => enterFlood(g), unflood: () => exitFlood(),
   snapshot() {   // map/UI state used to check that leaving the flood scenario restores the exact baseline
@@ -1534,13 +1686,13 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
     await new Promise((r) => setTimeout(r, 600)); map.off("render", c); return Math.round(n / 0.6);
   },
   fireDataArea: () => fireData && fireData.area,
-  histHidden: () => document.querySelector('#fireModes [data-mode="hist"]').classList.contains("hidden"),
+  histHidden: () => document.querySelector('#fireModes [data-mode="hist"]').classList.contains("unavail"),
   fireState: () => ({ on: fireOn, mode: fireMode, area: current, cardState: $("fireOut").dataset.state || null,
     cardText: $("fireOut").textContent.replace(/\s+/g, " ").trim(), bldStates: bldStateN,
-    boxHidden: document.querySelector('#modes [data-mode="fire"]').classList.contains("hidden") }),
+    boxHidden: document.querySelector('#modes [data-mode="fire"]').classList.contains("unavail") }),
   floodState: () => ({ on: floodOn, area: current, cardState: $("floodOut").dataset.state || null,
     cardText: $("floodOut").textContent.replace(/\s+/g, " ").trim(), bldStates: bldStateN,
-    boxHidden: document.querySelector('#modes [data-mode="flood"]').classList.contains("hidden"), coverFeatures,
+    boxHidden: document.querySelector('#modes [data-mode="flood"]').classList.contains("unavail"), coverFeatures,
     bldSrc: bldShown.src, bldReady: bldShown.ready, bldPinned }),
   state() {
     const box = document.getElementById("mitig");
@@ -1549,4 +1701,4 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
              clearVisible: !document.getElementById("clearBtn").classList.contains("hidden") };
   },
 };
-if (["1", "flood", "fire", "3d", "demo", "probe", "motion", "xarea", "firedrag", "trans", "proberadius"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only
+if (["1", "flood", "fire", "3d", "demo", "probe", "motion", "xarea", "firedrag", "trans", "proberadius", "picker"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only

@@ -8,7 +8,6 @@ tag, so the audience wording is "mapped water", not verified permanent water. Th
 from __future__ import annotations
 
 import json
-from functools import lru_cache
 
 import geopandas as gpd
 from shapely.geometry import box, mapping
@@ -16,16 +15,14 @@ from shapely.geometry import box, mapping
 from . import config, engine
 
 WATER_CLASSES = ("water", "riverbank", "reservoir")
-PROVINCE_GPKG = {"fredericton": "new-brunswick.gpkg", "tantallon": "nova-scotia.gpkg",
-                 "pointe_sapin": "new-brunswick.gpkg"}
 SIMPLIFY_M = 3.0          # display simplification; the layer is context only
 
 
-@lru_cache(maxsize=None)
-def water_geojson(area: str) -> bytes:
-    """Mapped open water in the study box as a compact GeoJSON FeatureCollection (EPSG:4326, 6-decimal coordinates)."""
+def water_geojson(area: str, province_gpkg: str) -> bytes:
+    """Mapped open water in the study box as a compact GeoJSON FeatureCollection (EPSG:4326, 6-decimal coordinates).
+    Not cached here: the API keeps it with the loaded area, so it is freed with it."""
     bbox = engine.STUDY_BBOX[area]
-    g = gpd.read_file(config.DATA / "osm" / PROVINCE_GPKG[area], layer="gis_osm_water_a_free", bbox=bbox)
+    g = gpd.read_file(config.DATA / "osm" / province_gpkg, layer="gis_osm_water_a_free", bbox=bbox)
     g = g[g["fclass"].isin(WATER_CLASSES)]
     g = g.to_crs(4326).clip(box(*bbox))
     g = g[~g.geometry.is_empty]

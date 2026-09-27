@@ -40,15 +40,24 @@
     <section>
       <h2>Location</h2>
       <div id="areas"></div>
+      <details id="areaMore">
+        <summary>All surveyed areas <span id="areaCount"></span></summary>
+        <input id="areaSearch" type="search" placeholder="Search areas" autocomplete="off" spellcheck="false" aria-label="Search areas">
+        <div id="areaList"></div>
+        <p class="fine"><span class="dot red"></span> = neighbourhoods where one sampled blockage cuts off 30+ mapped
+          buildings (survey results, same scan as the map). Upper Tantallon is a focused subset of the Halifax Regional
+          Municipality box and is not counted separately.</p>
+      </details>
     </section>
 
     <section>
       <h2>Scenario</h2>
       <div id="modes" class="seg">
         <button data-mode="vuln" class="on">Vulnerability</button>
-        <button data-mode="flood" class="hidden">Flood</button>
-        <button data-mode="fire" class="hidden">Fire</button>
+        <button data-mode="flood">Flood</button>
+        <button data-mode="fire">Fire</button>
       </div>
+      <div id="scenWhy" class="fine scen-why hidden"></div>
     </section>
 
     <section id="vulnBox">
@@ -111,6 +120,7 @@
           <button data-mode="hyp" class="on">Hypothetical area</button>
           <button data-mode="hist">Mapped 2023 fire perimeter</button>
         </div>
+        <div id="histWhy" class="fine scen-why hidden"></div>
         <div id="fireHyp">
           <div class="gaugehead">Supplied hypothetical affected area: radius <b id="fireRadiusVal">500 m</b></div>
           <input type="range" id="fireRadius" min="100" max="2000" step="50" value="500">

@@ -6,7 +6,6 @@ engine's building id. That alignment is verified on load. Nothing here changes a
 from __future__ import annotations
 
 import json
-from functools import lru_cache
 
 import geopandas as gpd
 import numpy as np
@@ -17,9 +16,9 @@ from . import config, engine
 SOURCE_FILES = {"osm": config.buildings_osm, "ms": config.buildings_ms}
 
 
-@lru_cache(maxsize=8)
 def footprints_json(area_name: str, src: str, n_expected: int, check_xy: tuple) -> bytes:
-    """GeoJSON (lon/lat) of the analysed footprints for one source; feature id = engine building id."""
+    """GeoJSON (lon/lat) of the analysed footprints for one source; feature id = engine building id.
+    Not cached here: the API keeps it with the loaded area, so it is freed with it."""
     b = gpd.read_file(SOURCE_FILES[src](area_name)).to_crs(config.ANALYSIS_CRS)
     b = b[b.geometry.area >= engine.MIN_HOME_M2].reset_index(drop=True)   # identical filter/order to the engine
     if len(b) != n_expected:

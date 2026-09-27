@@ -74,6 +74,34 @@ section + section { border-top: 1px solid var(--line); }
 #areas button { text-align: left; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line2); background: var(--panel2);
                 color: var(--fg); cursor: pointer; }
 #areas button.on { border-color: #8fb3d9; background: #16263a; }
+#areas button, #areaList .arow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.an { display: flex; flex-direction: column; min-width: 0; }
+.an small { color: var(--muted); font-size: 11px; line-height: 1.3; }
+.ar { flex: none; font-size: 12px; font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ar .dot { margin-right: 4px; }
+.ar.na { color: var(--muted); font-weight: 400; }
+#areaMore { margin-top: 8px; }
+#areaMore > summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 4px 0; }
+#areaMore[open] > summary { color: var(--fg); }
+#areaSearch { width: 100%; box-sizing: border-box; margin: 4px 0 6px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line2);
+              background: var(--bg); color: var(--fg); font: inherit; font-size: 13px; }
+#areaList { max-height: 300px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-right: 2px; }
+.agh { display: flex; justify-content: space-between; gap: 8px; margin: 8px 0 4px; font-size: 11px; font-weight: 700;
+       text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
+.agh span { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--muted); }
+#areaList .arow { width: 100%; text-align: left; margin: 0 0 3px; padding: 5px 8px; border-radius: 5px; border: 1px solid transparent;
+                  background: transparent; color: var(--fg); cursor: pointer; font-size: 13px; }
+#areaList .arow:hover:not([disabled]) { background: var(--panel2); border-color: var(--line2); }
+#areaList .arow.on { border-color: #8fb3d9; background: #16263a; }
+#areaList .arow[disabled] { opacity: .5; cursor: not-allowed; }
+.seg button.unavail, .presets button.unavail { opacity: .45; cursor: not-allowed; text-decoration: line-through; text-decoration-color: var(--dim); }
+.scen-why { margin-top: 6px; line-height: 1.4; }
+.scen-why b { color: var(--fg); font-weight: 600; }
+.one { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 3px; border: 1px solid var(--amber); color: var(--amber);
+       font-size: 10px; font-weight: 600; line-height: 15px; vertical-align: 1px; white-space: nowrap; }
+.one-note { margin-top: 6px; } .one-note .one { margin: 0 4px 0 0; }
+.area-notice { margin: 6px 0 0; font-size: 12px; font-weight: 600; background: #241d0b; color: #fcd34d; border: 1px solid #7a6014; }
+.load-err .fine { margin: 4px 0 8px; }
 .seg { display: flex; border: 1px solid var(--line2); border-radius: 6px; overflow: hidden; }
 .seg button { flex: 1; padding: 7px 6px; border: 0; background: var(--panel2); color: var(--muted); cursor: pointer; }
 .seg button + button { border-left: 1px solid var(--line2); }
