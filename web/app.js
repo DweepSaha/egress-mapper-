@@ -175,7 +175,16 @@ map.addLayer({ id: "fi-cut", type: "line", source: "fi-cut", layout: { visibilit
   paint: { "line-color": "#ff7a45", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4.5] } });
 map.addLayer({ id: "fi-roads", type: "line", source: "fi-roads", layout: { visibility: "none", "line-cap": "round" },
   paint: { "line-color": "#fde047", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 6] } });
-const FIRE_LAYERS = ["fi-zone", "fi-zone-line", "fi-cut", "fi-roads"];
+map.addSource("fire-preview", { type: "geojson", data: empty });   // drag preview only: never analysed
+map.addSource("fi-hit", { type: "geojson", data: empty });         // centre handle of the supplied area
+map.addLayer({ id: "fpv-fill", type: "fill", source: "fire-preview", paint: { "fill-color": "#ef4444", "fill-opacity": 0.08 } });
+map.addLayer({ id: "fpv-edge", type: "line", source: "fire-preview",
+  paint: { "line-color": "#fca5a5", "line-width": 2, "line-dasharray": [1, 1] } });
+map.addLayer({ id: "fi-dot", type: "circle", source: "fi-hit",
+  paint: { "circle-color": "#ffffff", "circle-stroke-color": "#ef4444", "circle-stroke-width": 2,
+           "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 4, 16, 6] } });
+map.addLayer({ id: "fi-hit", type: "circle", source: "fi-hit", paint: { "circle-radius": 20, "circle-color": "#ffffff", "circle-opacity": 0.01 } });
+const FIRE_LAYERS = ["fi-zone", "fi-zone-line", "fi-cut", "fi-roads", "fpv-fill", "fpv-edge", "fi-dot", "fi-hit"];
 let fireOn = false, fireGen = 0, fireData = null, fireMode = "hyp", fireCentre = null;
 // The vulnerability view saved when the FIRST scenario opens (selection + footprint source/pin). Switching flood <-> fire
 // hands it over unchanged ("handoff"); returning to vulnerability restores it; selection/area changes discard it.
@@ -786,7 +795,8 @@ async function runFire() {
   const url = mode === "hist" ? `/api/${area}/fire/historical`
     : `/api/${area}/fire/hypothetical?lon=${fireCentre[0]}&lat=${fireCentre[1]}&radius=${radius}`;
   out.dataset.state = "pending";
-  out.innerHTML = `<div class="src">Calculating…</div>`;
+  out.innerHTML = `<div class="src">Testing…</div>`;
+  renderFireBadge();
   let s;
   try {
     const r = await fetch(url);
@@ -795,6 +805,7 @@ async function runFire() {
   } catch (err) {
     if (gen !== fireGen || !fireOn || area !== current) return;
     out.dataset.state = "error"; out.innerHTML = `<div class="cut">Couldn't calculate this scenario (${err.message}).</div>`;
+    setFirePreview(empty); renderFireBadge(); renderFireHandle();
     return;
   }
   if (gen !== fireGen || !fireOn || area !== current || mode !== fireMode) return;   // superseded: touch nothing
@@ -803,12 +814,14 @@ async function runFire() {
     return;
   }
   fireData = { ...s, area };
+  setFirePreview(empty);                                       // the analysed area replaces the drag preview
   map.getSource("fi-zone").setData(s.zone);
   map.getSource("fi-roads").setData(s.roads_affected);
   map.getSource("fi-cut").setData(s.cut_roads);
   out.innerHTML = fireHtml(s) + `<div id="fireBld"></div>`;
   settleIn(out);
   out.dataset.state = "done";
+  renderFireBadge(); renderFireHandle();
   syncMode();
   const src = bldPinned || (s.counts.lose_access.ms > s.counts.lose_access.osm ? "ms" : "osm");
   if (bldShown.src !== src) loadBuildings(current, src); else applyBuildingCats();
@@ -819,6 +832,7 @@ function setFireMode(mode) {
   fireMode = mode;
   document.querySelectorAll("#fireModes button").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
   $("fireHyp").classList.toggle("hidden", mode !== "hyp");
+  clearFireDrag();                                              // a mode change ends any drag and its preview
   fireGen++; fireData = null;                                   // a new mode supersedes any pending calculation
   ["fi-zone", "fi-roads", "fi-cut"].forEach((l) => map.getSource(l).setData(empty));
   applyBuildingCats();
@@ -847,8 +861,10 @@ function enterFire(mode) {
 
 function exitFire(how = "restore") {            // "restore" | "discard" | "handoff" (booleans: true/false)
   how = exitHow(how);
+  clearFireDrag();                              // area switch / scenario switch / vulnerability: end drag + preview
   fireGen++;                                    // invalidate any pending scenario request
   fireOn = false; fireData = null; fireCentre = null;
+  renderFireHandle(); renderFireBadge();
   ["fi-zone", "fi-roads", "fi-cut"].forEach((l) => map.getSource(l).setData(empty));
   FIRE_LAYERS.forEach((l) => map.setLayoutProperty(l, "visibility", "none"));
   SCAN_OVERLAYS.forEach((l) => map.setLayoutProperty(l, "visibility", "visible"));
@@ -953,11 +969,46 @@ function snapPreview(ll) {
   }
   return best && { ll: [drag.o[0] + best[0] / kx, drag.o[1] + best[1] / ky], d: bd };
 }
-function discAt(ll) {   // preview circle, 50 m radius (drawn only; the analysed circle comes from the server)
+function discAt(ll, r = 50) {   // preview circle of radius r metres (drawn only; analysed geometry comes from the server)
   const { kx, ky } = localFrame(ll[1]), ring = [];
-  for (let k = 0; k <= 64; k++) { const a = (k / 64) * 2 * Math.PI; ring.push([ll[0] + (50 * Math.cos(a)) / kx, ll[1] + (50 * Math.sin(a)) / ky]); }
+  for (let k = 0; k <= 64; k++) { const a = (k / 64) * 2 * Math.PI; ring.push([ll[0] + (r * Math.cos(a)) / kx, ll[1] + (r * Math.sin(a)) / ky]); }
   return fc([{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } }]);
 }
+
+// ---------- shared circle-drag gesture (vulnerability blockage AND hypothetical fire) ----------
+// One gesture at a time; it only moves a preview and NEVER computes. The owner supplies place(lngLat) -> {ll, far}
+// (probe: snap to eligible roads; fire: free-floating), valid() (checked on every move), onMove(g) and onEnd(g, released),
+// which is where the owner makes its single request (or cancels). Listeners, map-pan and Esc are handled here.
+let gesture = null;
+function beginGesture(g) {
+  if (gesture) return false;
+  gesture = { cursor: null, far: false, moved: false, ...g };
+  map.dragPan.disable(); map.getCanvas().style.cursor = "grabbing";
+  map.on("mousemove", gestureMove);
+  document.addEventListener("mouseup", gestureUp, true);
+  document.addEventListener("keydown", gestureKey, true);
+  return true;
+}
+function endGesture() {         // detach listeners, restore map panning; the owner clears its own preview
+  if (!gesture) return null;
+  const g = gesture; gesture = null;
+  map.off("mousemove", gestureMove); document.removeEventListener("mouseup", gestureUp, true);
+  document.removeEventListener("keydown", gestureKey, true);
+  map.dragPan.enable(); map.getCanvas().style.cursor = "";
+  return g;
+}
+function gestureMove(e) {
+  const g = gesture;
+  if (!g) return;
+  if (!g.valid()) return gestureUp(null);
+  g.moved = true; g.cursor = [e.lngLat.lng, e.lngLat.lat];
+  const p = g.place(e.lngLat);
+  g.far = p.far;
+  if (!p.far) g.pos = p.ll;
+  g.onMove(g);
+}
+function gestureUp(e) { const g = endGesture(); if (g) g.onEnd(g, e !== null); }
+function gestureKey(e) { if (e.key === "Escape") gestureUp(null); }
 function blockageCentre() {   // centre of the blockage currently shown for the selected neighbourhood
   if (probeShown()) return probe.data.centre;
   const c = scanData && scanData.chokepoints.features.find((x) => x.properties.nid === selected);
@@ -1009,11 +1060,8 @@ function renderProbeCard() {
   $("probeReset").onclick = () => clearProbe();
   if (probeState === "done" && probeShown()) settleIn(el, { "probe-cut": shownNum["probe-cut"] ?? p.worst_cut });   // e.g. 234 -> 47
 }
-function endDragListeners() {
-  if (!drag) return;
-  map.off("mousemove", onProbeMove); document.removeEventListener("mouseup", onProbeUp, true);
-  document.removeEventListener("keydown", onProbeKey, true);
-  map.dragPan.enable(); map.getCanvas().style.cursor = "";
+function endDragListeners() {   // the probe's gesture, if one is active
+  if (drag && gesture === drag) endGesture();
 }
 function clearProbe() {       // reset to the worst sampled blockage; invalidates any drag or pending request
   probeGen++;
@@ -1026,23 +1074,11 @@ function clearProbe() {       // reset to the worst sampled blockage; invalidate
   renderBlockage();
   if (had) applyBuildingCats();
 }
-function onProbeKey(e) { if (e.key === "Escape") onProbeUp(null); }
-function onProbeMove(e) {
-  if (!drag || drag.area !== current || drag.nid !== selected || !canProbe()) return onProbeUp(null);
-  drag.cursor = [e.lngLat.lng, e.lngLat.lat];          // the raw cursor: what is sent on release
-  const s = snapPreview(e.lngLat);
-  drag.far = !s || s.d > PROBE_SNAP_M;
-  if (!drag.far) drag.pos = s.ll;                      // preview suggestion only
-  setPreview(discAt(drag.pos));
-  renderProbeCard();
-}
-function onProbeUp(e) {
-  if (!drag) return;
-  const d = drag;
-  endDragListeners(); drag = null;
+function probeEnd(d, released) {                     // gesture end (release, Esc or invalidation)
+  drag = null;
   const valid = d.area === current && d.nid === selected && canProbe();
   if (!valid) { setPreview(empty); probeState = probeShown() ? "done" : "none"; renderBlockage(); return; }
-  if (e === null || !d.moved || !d.cursor) {           // cancelled (Esc) or a click without a drag: nothing to test
+  if (!released || !d.moved || !d.cursor) {            // cancelled (Esc) or a click without a drag: nothing to test
     setPreview(empty); probeMsg = ""; probeState = probeShown() ? "done" : "none";
     renderBlockage(); return;
   }
@@ -1050,7 +1086,7 @@ function onProbeUp(e) {
   runProbe(d.cursor, d.far ? null : d.pos);
 }
 function startProbeDrag(e) {
-  if (drag || !canProbe()) return;
+  if (drag || gesture || !canProbe()) return;
   const c = blockageCentre();
   if (!c) return;
   e.preventDefault();
@@ -1070,15 +1106,16 @@ function startProbeDrag(e) {
   const addGeom = (g) => g.type === "LineString" ? addLine(g.coordinates) : g.type === "MultiLineString" ? g.coordinates.forEach(addLine) : null;
   if (probeRoads && probeRoads.area === current && probeRoads.nid === selected) probeRoads.data.features.forEach((r) => addGeom(r.geometry));
   else if (street) addGeom(street.geometry);           // fallback: own streets only (never wider than the server's set)
-  drag = { area: current, nid: selected, pos: c, cursor: null, far: false, moved: false, o, frame, segs };
+  const ok = beginGesture({ kind: "probe", area: current, nid: selected, pos: c, o, frame, segs,
+    place: (ll) => { const s = snapPreview(ll); return s && s.d <= PROBE_SNAP_M ? { ll: s.ll, far: false } : { ll: null, far: true }; },
+    valid: () => !!drag && drag.area === current && drag.nid === selected && canProbe(),
+    onMove: () => { setPreview(discAt(drag.pos)); renderProbeCard(); },   // preview suggestion only; raw cursor is sent
+    onEnd: probeEnd });
+  if (!ok) return;
+  drag = gesture;
   probeState = "dragging"; probeMsg = "";
-  map.dragPan.disable(); map.getCanvas().style.cursor = "grabbing";
   map.getSource("blk-hit").setData(empty);
   setPreview(discAt(c));
-  map.on("mousemove", onProbeMove);
-  map.once("mousemove", () => { if (drag) drag.moved = true; });
-  document.addEventListener("mouseup", onProbeUp, true);
-  document.addEventListener("keydown", onProbeKey, true);
   renderProbeCard();
 }
 async function runProbe(ll, previewAt) {          // ll = raw release point; previewAt = suggested spot to show meanwhile
@@ -1102,6 +1139,59 @@ async function runProbe(ll, previewAt) {          // ll = raw release point; pre
   attention(d.centre);
   applyBuildingCats();
 }
+// ---------- hypothetical fire: drag the supplied area by its centre (free-floating, no snapping) ----------
+// Dragging only moves a preview ("Release to test this area"); release sets the centre and makes ONE runFire() call,
+// covered by the existing fire generation/area/mode guards. The radius stays on the slider.
+let firePreviewN = 0, fireClickBlockUntil = 0;
+function setFirePreview(data) { firePreviewN = data.features.length; map.getSource("fire-preview").setData(data); }
+const fireDragging = () => !!(gesture && gesture.kind === "fire");
+function renderFireHandle() {
+  const show = fireOn && fireMode === "hyp" && fireCentre && !fireDragging();
+  map.getSource("fi-hit").setData(show ? fc([pt(fireCentre)]) : empty);
+}
+function renderFireBadge() {
+  const b = $("fireBadge"), pending = fireOn && $("fireOut").dataset.state === "pending";
+  b.classList.toggle("hidden", !(fireDragging() || pending));
+  b.textContent = fireDragging() ? "Release to test this area" : pending ? "Testing…" : "";
+}
+function clearFireDrag() {     // end a fire drag (if any) and drop its preview; never touches the committed centre
+  if (fireDragging()) endGesture();
+  setFirePreview(empty); renderFireBadge();
+}
+function startFireDrag(e) {
+  if (gesture || !fireOn || fireMode !== "hyp" || !fireCentre) return;
+  e.preventDefault();
+  const wasPending = $("fireOut").dataset.state === "pending";
+  const area = current, r = () => +$("fireRadius").value;
+  const ok = beginGesture({ kind: "fire", area, pos: fireCentre, wasPending,
+    place: (ll) => ({ ll: [ll.lng, ll.lat], far: false }),                 // free-floating: any position is meaningful
+    valid: () => fireOn && fireMode === "hyp" && current === area,
+    onMove: (g) => { setFirePreview(discAt(g.pos, r())); renderFireBadge(); },
+    onEnd: fireDragEnd });
+  if (!ok) return;
+  fireGen++;                                           // a drag supersedes any calculation still in flight
+  map.getSource("fi-hit").setData(empty);
+  setFirePreview(discAt(fireCentre, r()));
+  renderFireBadge();
+}
+function fireDragEnd(g, released) {
+  fireClickBlockUntil = Date.now() + 120;             // the release's own click event must not also place the centre
+  const valid = fireOn && fireMode === "hyp" && current === g.area;
+  if (!valid) { setFirePreview(empty); renderFireBadge(); renderFireHandle(); return; }
+  if (!released || !g.moved || !g.cursor) {           // Esc / no movement: nothing to test
+    setFirePreview(empty); renderFireBadge(); renderFireHandle();
+    if (g.wasPending) runFire();                      // the drag superseded a calculation for the unchanged centre
+    return;
+  }
+  fireCentre = [+g.cursor[0].toFixed(6), +g.cursor[1].toFixed(6)];   // same precision as click-to-place
+  setFirePreview(discAt(fireCentre, +$("fireRadius").value));       // stays where released while testing
+  syncMode();
+  runFire();                                          // exactly one calculation
+}
+map.on("mousedown", "fi-hit", (e) => startFireDrag(e));
+map.on("mouseenter", "fi-hit", () => { if (!gesture && fireOn && fireMode === "hyp") map.getCanvas().style.cursor = "grab"; });
+map.on("mouseleave", "fi-hit", () => { if (!gesture) map.getCanvas().style.cursor = fireOn && fireMode === "hyp" ? "crosshair" : ""; });
+
 for (const l of ["blk-hit", "blocked", "probe-gap"]) {
   map.on("mousedown", l, (e) => startProbeDrag(e));
   map.on("mouseenter", l, () => { if (!drag && canProbe()) map.getCanvas().style.cursor = "grab"; });
@@ -1191,10 +1281,16 @@ function setView(v, animate = true) {
 }
 document.querySelectorAll("#viewCtl button").forEach((b) => (b.onclick = () => setView(b.dataset.view)));
 document.querySelectorAll("#fireModes button").forEach((b) => (b.onclick = () => fireOn && setFireMode(normFireMode(b.dataset.mode))));
-$("fireRadius").oninput = (e) => ($("fireRadiusVal").textContent = `${(+e.target.value).toLocaleString()} m`);
-$("fireRadius").onchange = () => fireOn && fireMode === "hyp" && runFire();   // on release
+$("fireRadius").oninput = (e) => {
+  $("fireRadiusVal").textContent = `${(+e.target.value).toLocaleString()} m`;
+  if (fireDragging()) setFirePreview(discAt(gesture.pos, +e.target.value));
+};
+$("fireRadius").onchange = (e) => {                  // on release; mid-drag it only resizes the preview
+  if (fireDragging()) { setFirePreview(discAt(gesture.pos, +e.target.value)); return; }
+  if (fireOn && fireMode === "hyp") runFire();
+};
 map.on("click", (e) => {
-  if (!fireOn || fireMode !== "hyp") return;
+  if (!fireOn || fireMode !== "hyp" || gesture || Date.now() < fireClickBlockUntil) return;
   fireCentre = [+e.lngLat.lng.toFixed(6), +e.lngLat.lat.toFixed(6)];
   syncMode();
   runFire();
@@ -1281,11 +1377,20 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
   },
   blockedFilter: () => map.getFilter("blocked"),
   probeDrop: (lon, lat) => runProbe([lon, lat], [lon, lat]),
-  probeDragMove: (lon, lat) => { if (drag) { drag.moved = true; onProbeMove({ lngLat: { lng: lon, lat } }); } },
+  probeDragMove: (lon, lat) => { if (drag && gesture === drag) gestureMove({ lngLat: { lng: lon, lat } }); },
   previewFeatures: async () => (await map.getSource("probe-preview").getData()).features.length,
   previewN: () => previewN,
   probeDragStart() { const c = blockageCentre(); if (c) startProbeDrag({ preventDefault() {}, lngLat: { lng: c[0], lat: c[1] } }); return !!drag; },
-  probeDragEnd: (cancel) => onProbeUp(cancel ? null : {}),
+  probeDragEnd: (cancel) => { if (drag && gesture === drag) gestureUp(cancel ? null : {}); },
+  fireDragStart() { startFireDrag({ preventDefault() {} }); return fireDragging(); },
+  fireDragMove: (lon, lat) => { if (fireDragging()) gestureMove({ lngLat: { lng: lon, lat } }); },
+  fireDragEnd: (cancel) => { if (fireDragging()) gestureUp(cancel ? null : {}); },
+  fireClick: (lon, lat) => map.fire("click", { lngLat: { lng: lon, lat }, point: { x: 0, y: 0 }, originalEvent: {} }),
+  fireInfo: async () => ({ dragging: fireDragging(), centre: fireCentre, state: $("fireOut").dataset.state || null,
+    previewN: firePreviewN, previewFeatures: (await map.getSource("fire-preview").getData()).features.length,
+    handle: (await map.getSource("fi-hit").getData()).features.length, badge: $("fireBadge").classList.contains("hidden") ? "" : $("fireBadge").textContent,
+    dragPan: map.dragPan.isEnabled(), radius: fireData && fireData.radius_m, area: fireData && fireData.area,
+    card: $("fireOut").textContent.replace(/\s+/g, " ").trim(), gesture: gesture && gesture.kind }),
   probeReset: () => clearProbe(),
   probeInfo: () => ({ shown: probeShown(), state: probeState, gen: probeGen, dragging: !!drag, msg: probeMsg,
     centre: probe ? probe.data.centre : null, cut: probe ? [probe.data.cut_osm, probe.data.cut_ms] : null,
@@ -1313,4 +1418,4 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
              clearVisible: !document.getElementById("clearBtn").classList.contains("hidden") };
   },
 };
-if (["1", "flood", "fire", "3d", "demo", "probe", "motion", "xarea"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only
+if (["1", "flood", "fire", "3d", "demo", "probe", "motion", "xarea", "firedrag"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only

@@ -530,6 +530,78 @@ async function xareaSuite() {
     app.scenSaved() === null && JSON.parse(app.snapshot()).selected === null, {});
 }
 
+async function fireDragSuite() {
+  // hypothetical fire: drag the centre (free-floating), one calculation on release, same stale-response guards
+  const A = [-63.854, 44.7052], B = [-63.8600, 44.7100], C = [-63.8480, 44.7000];
+  const I = () => app.fireInfo();
+  const fireReqs = () => urlLog.filter((u) => u.includes("/fire/hypothetical"));
+  const settle = async () => { for (let i = 0; i < 150; i++) { const s = await I(); if (s.state !== "pending") return s; await sleep(150); } return I(); };
+  const near = (c, p) => c && Math.abs(c[0] - p[0]) < 1e-6 && Math.abs(c[1] - p[1]) < 1e-6;
+  await app.loadArea("tantallon"); await sleep(400);
+  app.fire("hyp", A, 500); await settle();
+  // FD1 drag moves only a preview; release -> exactly one request, "Testing...", supplied-area wording intact
+  urlLog.length = 0; fireDelays.push(800);
+  const started = app.fireDragStart(); app.fireDragMove(...B);
+  const mid = await I(); const reqMid = fireReqs().length;
+  app.fireDragEnd(false); await sleep(100);
+  const pend = await I();
+  const fin = await settle();
+  record("FD1 drag = preview only; release = one request (Testing...), free-floating centre, supplied-area wording kept",
+    started && mid.dragging && mid.badge === "Release to test this area" && mid.previewFeatures === 1 && reqMid === 0 &&
+    pend.state === "pending" && pend.badge === "Testing…" && fireReqs().length === 1 && near(fin.centre, B) &&
+    fin.state === "done" && fin.previewFeatures === 0 && fin.handle === 1 && fin.card.includes("not a predicted fire extent") &&
+    fin.card.includes("This tool does not predict fire spread"), { mid, pend: pend.state, fin, reqs: fireReqs() });
+  // FD2 drag started while a calculation is in flight: its answer is discarded; cancelling re-tests the unchanged centre
+  arrivals.length = 0; urlLog.length = 0; fireDelays.push(1500);
+  app.fireClick(...C); await sleep(150);
+  const inflight = (await I()).state;
+  app.fireDragStart(); app.fireDragMove(...A); app.fireDragEnd(true);
+  const fin2 = await settle(); await sleep(1700);
+  const fin2b = await I();
+  record("FD2 drag during an in-flight calculation: stale answer discarded; Esc re-tests the unchanged centre",
+    inflight === "pending" && near(fin2b.centre, C) && fin2b.state === "done" && fireReqs().length === 2 && fin2b.previewFeatures === 0,
+    { inflight, centre: fin2b.centre, reqs: fireReqs().length });
+  // FD3 rapid repeated drops: the newest drop wins
+  urlLog.length = 0; fireDelays.push(1500, 0);
+  app.fireDragStart(); app.fireDragMove(...A); app.fireDragEnd(false); await sleep(100);
+  app.fireDragStart(); app.fireDragMove(...B); app.fireDragEnd(false);
+  await sleep(1900); const fin3 = await settle();
+  record("FD3 rapid repeated drops: the newest centre wins", near(fin3.centre, B) && fin3.state === "done" && fireReqs().length === 2,
+    { centre: fin3.centre, reqs: fireReqs().length });
+  // FD4 radius slider moved mid-drag: preview resizes, no request; release -> one request with the new radius
+  urlLog.length = 0;
+  app.fireDragStart(); app.fireDragMove(...A);
+  const sl = document.getElementById("fireRadius"); sl.value = 900; sl.dispatchEvent(new Event("input")); sl.dispatchEvent(new Event("change"));
+  await sleep(200); const reqSlider = fireReqs().length, dragging4 = (await I()).dragging;
+  app.fireDragEnd(false); const fin4 = await settle();
+  record("FD4 radius changed mid-drag: no request while dragging; release tests the new radius once",
+    reqSlider === 0 && dragging4 && fireReqs().length === 1 && fireReqs()[0].includes("radius=900") && fin4.radius === 900,
+    { reqSlider, reqs: fireReqs(), radius: fin4.radius });
+  sl.value = 500; sl.dispatchEvent(new Event("input"));
+  // FD5 click-to-place still works (and a drag release is not also a click)
+  await sleep(200); urlLog.length = 0; app.fireClick(...C); const fin5 = await settle();
+  record("FD5 click-to-place unchanged", near(fin5.centre, C) && fireReqs().length === 1 && fin5.state === "done", { centre: fin5.centre });
+  // FD6 area switch mid-drag: gesture ended, map pan restored, preview gone, fire off
+  app.fireDragStart(); app.fireDragMove(...A);
+  await app.loadArea("fredericton"); await sleep(400);
+  const fin6 = await I();
+  record("FD6 area switch mid-drag: drag ended, pan restored, no preview, fire off",
+    !fin6.dragging && fin6.dragPan && fin6.previewFeatures === 0 && fin6.handle === 0 && !app.fireState().on && fin6.badge === "",
+    fin6);
+  // FD7 scenario switch mid-drag (fire -> flood -> vulnerability) on Fredericton restores the vulnerability view
+  const nid = app.topNid(); app.select(nid); await sleep(1500);
+  const tab = (m) => document.querySelector(`#modes [data-mode="${m}"]`).click();
+  tab("fire"); await sleep(300); app.fire("hyp", [-66.645, 45.958], 500); await settle();
+  app.fireDragStart(); app.fireDragMove(-66.640, 45.960);
+  tab("flood"); await sleep(300);
+  const mid7 = await I();
+  await app.flood(8.36); tab("vuln"); await sleep(1500);
+  const fin7 = await I(), snap7 = JSON.parse(app.snapshot());
+  record("FD7 fire -> flood mid-drag -> vulnerability: drag ended, no preview, original selection restored",
+    !mid7.dragging && mid7.dragPan && mid7.previewFeatures === 0 && !fin7.dragging && snap7.selected === nid && app.scenSaved() === null,
+    { mid7, selected: snap7.selected });
+}
+
 async function main() {
   const q = new URLSearchParams(location.search);
   if (q.get("selftest") === "flood") return floodSuite();
@@ -539,6 +611,7 @@ async function main() {
   if (q.get("selftest") === "probe") return probeSuite();
   if (q.get("selftest") === "motion") return motionSuite();
   if (q.get("selftest") === "xarea") return xareaSuite();
+  if (q.get("selftest") === "firedrag") return fireDragSuite();
   if (q.get("road")) {                                               // 5. deep link -> Clear
     for (let i = 0; i < 100 && app.state().cardState !== "done"; i++) await sleep(200);
     const before = app.state();

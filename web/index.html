@@ -108,7 +108,8 @@
         <div id="fireHyp">
           <div class="gaugehead">Supplied hypothetical affected area: radius <b id="fireRadiusVal">500 m</b></div>
           <input type="range" id="fireRadius" min="100" max="2000" step="50" value="500">
-          <p class="fine" id="fireHint">Click the map to place the centre. The radius is your input, not a predicted fire extent.</p>
+          <p class="fine" id="fireHint">Click the map to place the centre, or drag the centre to move it. The radius is your
+            input, not a predicted fire extent.</p>
         </div>
         <details class="method"><summary>Method / assumptions</summary>
           <p>You supply the affected area; the map shows road access under it. No wind, weather, fire behaviour, traffic
@@ -123,6 +124,7 @@
     <div id="map"></div>
     <div id="viewDock">
       <div id="blkBadge" class="hidden"></div>
+      <div id="fireBadge" class="hidden"></div>
       <div id="viewNote" class="hidden">3D view: building heights are illustrative (one fixed height for every mapped building).</div>
       <div id="viewCtl" class="seg"><button data-view="2d" class="on">2D</button><button data-view="3d">3D</button></div>
     </div>

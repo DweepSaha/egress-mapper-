@@ -272,3 +272,6 @@ details.method p { margin: 6px 0; }
 html.arrive #app { animation: arrive 700ms ease-out both; }
 @keyframes arrive { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { html.arrive #app { animation: none; } }
+
+#fireBadge { font-size: 11.5px; color: #fed7aa; background: rgba(13, 17, 22, .92); border: 1px solid #f97316;
+             border-radius: 5px; padding: 3px 9px; white-space: nowrap; }
