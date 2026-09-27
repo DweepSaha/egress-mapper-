@@ -103,11 +103,48 @@ def test_data():
     print("PASS data: snaps onto eligible roads; far and not-assessed rejected; disjoint categories; scan unchanged")
 
 
+def test_radius(a=None):
+    """User radius: the wrapper copy is identical to engine.evaluate_block at 50 m at every scan sample point the
+    scan would test for Westwood; other radii are labelled non-comparable and use the user's circle."""
+    import math
+    import shapely
+    a = a or engine.load_area("tantallon")
+    res = engine.scan(a)
+    r = next(x for x in res if x["nid"] == 99)
+    nb = probe._nb(a, 99)
+    pts = engine.sample_points(a)
+    tree = shapely.STRtree(pts)
+    reach = shapely.union_all([a.edges[i].line for i in nb.edge_idx] + [Point(a.node_xy[g]) for g in nb.gateways])
+    idx = tree.query(reach, predicate="dwithin", distance=engine.BLOCK_RADIUS_M)
+    for j in idx:
+        e1 = engine.evaluate_block(a, nb, pts[int(j)])
+        e2 = probe._evaluate_circle(a, nb, pts[int(j)], 50.0)
+        assert e1["cut_ids"] == e2["cut_ids"] and e1["cut_edges"] == e2["cut_edges"] and e1["inside"] == e2["inside"], int(j)
+    print(f"PASS radius wrapper copy == engine.evaluate_block at 50 m for all {len(idx)} Westwood scan sample points")
+    lon, lat = engine._TO_LL(r["choke"].x, r["choke"].y)
+    d50 = probe.probe(a, r, lon, lat)                      # default = scan radius
+    d150 = probe.probe(a, r, lon, lat, 150)
+    assert d50["comparable_with_scan"] and d50["radius_m"] == 50 and (d50["cut_osm"], d50["cut_ms"]) == (234, 194)
+    assert d150["ok"] and d150["radius_m"] == 150 and d150["comparable_with_scan"] is False, d150.get("radius_m")
+    disc = [f for f in d150["geo"]["features"] if f["properties"]["kind"] == "disc"][0]
+    ring = [engine._TO_M(*c) for c in disc["geometry"]["coordinates"][0]]
+    area_m2 = shapely.Polygon(ring).area
+    assert abs(area_m2 - math.pi * 150 ** 2) / (math.pi * 150 ** 2) < 0.01, area_m2
+    for s in engine.SOURCES:
+        c, i, k = (set(d150["ids"][s][x]) for x in ("cut", "inside", "retain"))
+        assert not (c & i or c & k or i & k) and c | i | k == nb.cohort(a)[s], s
+    for bad in (24.9, 300.1):
+        assert probe.probe(a, r, lon, lat, bad)["reason"] == "bad_radius"
+    print(f"PASS radius 150 m: labelled not comparable, 150 m circle, disjoint categories "
+          f"(lose {d150['cut_osm']}/{d150['cut_ms']}); 50 m default still 234/194; out-of-range rejected")
+
+
 if __name__ == "__main__":
     try:
         test_synthetic()
         if config.roads_graphml("tantallon").exists():
             test_data()
+            test_radius()
         else:
             print("SKIP data tests (prepared data not found)")
         print("ALL PASS")

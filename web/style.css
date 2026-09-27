@@ -275,3 +275,8 @@ html.arrive #app { animation: arrive 700ms ease-out both; }
 
 #fireBadge { font-size: 11.5px; color: #fed7aa; background: rgba(13, 17, 22, .92); border: 1px solid #f97316;
              border-radius: 5px; padding: 3px 9px; white-space: nowrap; }
+
+#probeRadius { width: 100%; margin: 8px 0 4px; }
+#probeRadiusBox { margin-top: 10px; }
+.pwarn { margin: 6px 0; padding: 5px 8px; border-radius: 5px; background: #2a1d0a; border: 1px solid #a16207;
+         color: #fde68a; font-size: 12.5px; font-weight: 600; }

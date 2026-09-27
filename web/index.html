@@ -58,6 +58,12 @@
         <button id="drawBtn">Test a new road</button>
         <button id="clearBtn" class="hidden">Clear</button>
       </div>
+      <div id="probeRadiusBox" class="hidden">
+        <div class="gaugehead">Test blockage radius: <b id="probeRadiusVal">50 m (scan radius)</b></div>
+        <input type="range" id="probeRadius" min="25" max="300" step="5" value="50">
+        <p class="fine">The scan tests a fixed 50 m radius (100 m across). Any other radius is your own test and is not
+          comparable with the scan finding.</p>
+      </div>
       <div id="hint" class="fine hidden">Click two points on the map: each end joins the nearest existing road junction or road end (within 400 m).</div>
       <div id="legend">
         <h3>Map key</h3>

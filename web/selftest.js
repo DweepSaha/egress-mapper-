@@ -312,7 +312,7 @@ async function probeSuite() {
   const panel0 = panel();
   const s0 = P();
   record("P0 selected Westwood shows the worst sampled blockage; badge says so",
-    !s0.shown && JSON.stringify(s0.blocked) === scanFilter && s0.badge === "Map shows: worst sampled blockage", s0);
+    !s0.shown && JSON.stringify(s0.blocked) === scanFilter && s0.badge === "Map shows: worst sampled blockage (50 m radius)", s0);
 
   await app.probeDrop(...WORST); await done();
   const s1 = P();
@@ -325,7 +325,7 @@ async function probeSuite() {
   const s2 = P();
   record("P2 placing it elsewhere gives a different result; the scan panel is unchanged",
     s2.shown && JSON.stringify(s2.centre) !== JSON.stringify(s1.centre) && panel() === panel0 &&
-    s2.card.includes("Worst sampled blockage for this neighbourhood (scan finding): 234"), { centre: s2.centre, cut: s2.cut });
+    s2.card.includes("Worst sampled blockage for this neighbourhood (scan finding, 50 m radius): 234"), { centre: s2.centre, cut: s2.cut });
 
   arrivals.length = 0; probeDelays.push(1500, 0);
   const pA = app.probeDrop(...WORST); await sleep(100); const pB = app.probeDrop(...OTHER);
@@ -353,7 +353,7 @@ async function probeSuite() {
   const s5 = P();
   record("P5 reset mid-calculation: back to the worst sampled blockage, late answer ignored",
     !s5.shown && s5.state === "none" && JSON.stringify(s5.blocked) === scanFilter && s5.probeFeatures === 0 &&
-    panel() === panel0 && s5.badge === "Map shows: worst sampled blockage", s5);
+    panel() === panel0 && s5.badge === "Map shows: worst sampled blockage (50 m radius)", s5);
 
   await app.probeDrop(...FAR); await done();
   const s6 = P();
@@ -649,6 +649,56 @@ async function transSuite() {
     vulnState() && tr && tr.duration === 0 && !app.bldDipped() && JSON.parse(app.snapshot()).vis["fl-cover"] === "none", { tr });
 }
 
+async function probeRadiusSuite() {
+  // user radius on the placed blockage: never displayed as the scan finding; reset restores radius AND position
+  const OTHER = [-63.88573, 44.73359];
+  const P = () => app.probeInfo(), panel = () => JSON.parse(app.snapshot()).panelText;
+  const done = async () => { for (let i = 0; i < 100 && P().state === "pending"; i++) await sleep(100); };
+  const scanFilter = JSON.stringify(["==", ["get", "nid"], 99]);
+  await app.loadArea("tantallon"); app.select(99); await sleep(1500);
+  const panel0 = panel();
+  probeBodies.length = 0;
+  app.probeRadius(150); await done();
+  const s1 = P();
+  record("PR1 radius 150 m: one request at the scan's centre, labelled 'not comparable'; the scan finding stays 50 m",
+    probeBodies.length === 1 && probeBodies[0].radius === 150 && s1.shown && s1.radius === 150 && s1.comparable === false &&
+    s1.card.includes("not comparable with the scan finding") && s1.card.includes("radius 150 m") &&
+    s1.badge.includes("150 m radius (scan uses 50 m)") && panel() === panel0 && panel0.includes("50 m radius") &&
+    s1.card.includes("(scan finding, 50 m radius): 234"), { bodies: probeBodies.slice(), s1: { r: s1.radius, badge: s1.badge } });
+  app.probeReset(); await sleep(200);
+  const s2 = P();
+  record("PR2 Reset restores radius AND position: slider 50, scan's own 50 m blockage shown",
+    app.probeSlider() === 50 && !s2.shown && JSON.stringify(s2.blocked) === scanFilter && s2.badge === "Map shows: worst sampled blockage (50 m radius)",
+    { slider: app.probeSlider(), badge: s2.badge });
+  probeBodies.length = 0;
+  app.probeDragStart(); app.probeDragMove(...OTHER);
+  app.probeRadius(200); await sleep(200);
+  const mid = probeBodies.length, dragging = P().dragging;
+  app.probeDragEnd(false); await done();
+  const s3 = P();
+  record("PR3 slider moved mid-drag: preview only; release tests the new radius once",
+    mid === 0 && dragging && probeBodies.length === 1 && probeBodies[0].radius === 200 && s3.radius === 200 && s3.comparable === false,
+    { mid, bodies: probeBodies.slice() });
+  app.select(58); await sleep(800);
+  const r4a = app.probeSlider();
+  app.select(99); await sleep(800); app.probeRadius(120); await done();
+  await app.loadArea("fredericton"); await sleep(300);
+  const r4b = app.probeSlider();
+  record("PR4 selection change and area switch reset the radius to the scan's 50 m", r4a === 50 && r4b === 50 && !P().shown, { r4a, r4b });
+  await app.loadArea("tantallon"); app.select(99); await sleep(1200);
+  await app.probeDrop(...OTHER); await done();
+  probeDelays.push(1500, 0);
+  app.probeRadius(250); await sleep(100); app.probeRadius(80); await sleep(1800); await done();
+  const s5 = P();
+  record("PR5 radius changed while a calculation is pending: the newest radius wins", s5.shown && s5.radius === 80 && app.probeSlider() === 80,
+    { radius: s5.radius, slider: app.probeSlider() });
+  app.probeRadius(50); await done();
+  const s6 = P();
+  record("PR6 radius back to 50 m at a placed position: comparable, no warning", s6.shown && s6.radius === 50 && s6.comparable === true &&
+    !s6.card.includes("not comparable"), { radius: s6.radius });
+  app.probeReset();
+}
+
 async function main() {
   const q = new URLSearchParams(location.search);
   if (q.get("selftest") === "flood") return floodSuite();
@@ -660,6 +710,7 @@ async function main() {
   if (q.get("selftest") === "xarea") return xareaSuite();
   if (q.get("selftest") === "firedrag") return fireDragSuite();
   if (q.get("selftest") === "trans") return transSuite();
+  if (q.get("selftest") === "proberadius") return probeRadiusSuite();
   if (q.get("road")) {                                               // 5. deep link -> Clear
     for (let i = 0; i < 100 && app.state().cardState !== "done"; i++) await sleep(200);
     const before = app.state();

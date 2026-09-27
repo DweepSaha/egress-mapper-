@@ -147,6 +147,7 @@ def fire_hypothetical(area: str, lon: float, lat: float, radius: float):
 class ProbePoint(BaseModel):
     lon: float
     lat: float
+    radius: float = probe.SCAN_RADIUS_M      # user probe only; default = the scan's fixed 50 m
 
 
 @app.post("/api/{area}/nb/{nid}/probe")
@@ -157,9 +158,9 @@ def nb_probe(area: str, nid: int, p: ProbePoint):
     r = next((r for r in c["results"] if r["nid"] == nid), None)
     if r is None:
         raise HTTPException(404, f"no neighbourhood {nid}")
-    if not (math.isfinite(p.lon) and math.isfinite(p.lat)):
-        raise HTTPException(400, "lon/lat must be finite")
-    return probe.probe(c["area"], r, p.lon, p.lat)
+    if not (math.isfinite(p.lon) and math.isfinite(p.lat) and math.isfinite(p.radius)):
+        raise HTTPException(400, "lon/lat/radius must be finite")
+    return probe.probe(c["area"], r, p.lon, p.lat, p.radius)
 
 
 @app.get("/api/{area}/nb/{nid}/probe-roads")

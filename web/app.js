@@ -318,7 +318,7 @@ function panelHtml(p) {
   const affected = na
     ? metric("—", "affected: not assessed", "na")
     : metric(N(p.worst_cut), "lose access if the worst sampled blockage occurs", p.worst_cut > 0 ? "cut" : "",
-             pairTxt(p.worst_cut_osm, p.worst_cut_ms), { k: "nb-cut", v: p.worst_cut });
+             pairTxt(p.worst_cut_osm, p.worst_cut_ms) + " · 50 m radius", { k: "nb-cut", v: p.worst_cut });
   return `<div class="kicker">Access vulnerability</div>
     <div class="stag ${p.status}"><b>${STATUS_TAG[p.status]}</b> ${STATUS_TXT[p.status]}</div>
     <div class="mgrid3">
@@ -998,6 +998,13 @@ function attentionAfterMove(ll) {   // after the camera arrives (moveend), unles
 // if it is still the newest request for the same area + neighbourhood in vulnerability mode.
 let probe = null, probeGen = 0, probeState = "none", probeMsg = "", drag = null;
 let probeRoads = null;       // {area, nid, data}: the server's eligible roads for the selected neighbourhood (preview only)
+// User probe radius (the scan's fixed disc is 50 m). Reset restores BOTH position and radius to the scan's.
+const SCAN_R = 50;
+const probeR = () => +$("probeRadius").value;
+function setProbeRadius(r) {
+  $("probeRadius").value = r;
+  $("probeRadiusVal").textContent = r === SCAN_R ? `${r} m (scan radius)` : `${r} m (your test, not the scan's 50 m)`;
+}
 let previewN = 0;            // features currently in the preview source (mirrors setPreview)
 function setPreview(data) { previewN = data.features.length; map.getSource("probe-preview").setData(data); }
 // fetched on selection (never during a drag); the preview suggests only positions the server will accept
@@ -1087,6 +1094,7 @@ function renderBlockage() {
   updateChokeFilter();
   const c = !drag && canProbe() ? blockageCentre() : null;
   map.getSource("blk-hit").setData(c ? fc([pt(c)]) : empty);
+  $("probeRadiusBox").classList.toggle("hidden", !canProbe());
   renderProbeCard();
 }
 function renderProbeCard() {
@@ -1095,11 +1103,14 @@ function renderProbeCard() {
   badge.classList.toggle("hidden", !p || floodOn || fireOn || p.status === "not_assessed" || proposalCount > 0);
   badge.className = badge.className.replace(/ ?probe-on/, "") + (probeShown() || drag ? " probe-on" : "");
   badge.textContent = drag ? (drag.far ? "Too far from a road: release to cancel" : "Release to test this blockage")
-    : probeState === "pending" ? "Testing…" : probeShown() ? "Map shows: blockage you placed" : "Map shows: worst sampled blockage";
+    : probeState === "pending" ? "Testing…"
+    : probeShown() ? (probe.data.radius_m === SCAN_R ? "Map shows: blockage you placed"
+                      : `Map shows: blockage you placed · ${probe.data.radius_m} m radius (scan uses 50 m)`)
+    : "Map shows: worst sampled blockage (50 m radius)";
   el.classList.toggle("hidden", !vis);
   el.dataset.state = probeState;
   if (!vis) { el.innerHTML = ""; return; }
-  const worst = `<div class="fine">Worst sampled blockage for this neighbourhood (scan finding): <b>${N(p.worst_cut)}</b>
+  const worst = `<div class="fine">Worst sampled blockage for this neighbourhood (scan finding, 50 m radius): <b>${N(p.worst_cut)}</b>
     <span class="src">(${pairTxt(p.worst_cut_osm, p.worst_cut_ms)})</span></div>`;
   const reset = `<button id="probeReset" class="probe-reset">Reset to worst sampled blockage</button>`;
   let body;
@@ -1116,10 +1127,14 @@ function renderProbeCard() {
       ${distBlock("Mapped buildings under the blockage you placed", [
         { cls: "cut", label: "Lose access", key: "cut" }, { cls: "inside", label: "Inside the blocked area", key: "inside" },
         { cls: "retain", label: "Retain access", key: "retain" }], c, false)}
-      ${d.cut > p.worst_cut ? `<div class="fine">Higher than the worst sampled blockage: the scan tests points every 50 m,
-        and this position falls between them.</div>` : ""}`;
+      ${d.cut > p.worst_cut && d.comparable_with_scan ? `<div class="fine">Higher than the worst sampled blockage: the scan tests
+        points every 50 m, and this position falls between them.</div>` : ""}`;
   } else body = "";
-  el.innerHTML = `<div class="kicker">Blockage you placed</div>
+  const r = probeShown() ? probe.data.radius_m : probeR();
+  const notComparable = probeShown() && probeState === "done" && !probe.data.comparable_with_scan
+    ? `<div class="pwarn">Radius ${probe.data.radius_m} m: not comparable with the scan finding, which tests a 50 m radius
+       (100 m across).</div>` : "";
+  el.innerHTML = `<div class="kicker">Blockage you placed · radius ${r} m</div>${notComparable}
     ${probeMsg ? `<div class="pmsg">${probeMsg}</div>` : ""}${body}${worst}${reset}
     <div class="fine">Your test only: it does not change the scan, the ranking or the neighbourhood's classification.</div>`;
   $("probeReset").onclick = () => clearProbe();
@@ -1134,6 +1149,7 @@ function clearProbe() {       // reset to the worst sampled blockage; invalidate
   setPreview(empty);          // always: also covers a pending calculation (no drag active)
   const had = probe !== null;
   probe = null; probeState = "none"; probeMsg = "";
+  setProbeRadius(SCAN_R);                     // reset restores the scan's radius as well as its position
   delete shownNum["probe-cut"];
   if (!scanData) return;
   renderBlockage();
@@ -1174,31 +1190,36 @@ function startProbeDrag(e) {
   const ok = beginGesture({ kind: "probe", area: current, nid: selected, pos: c, o, frame, segs,
     place: (ll) => { const s = snapPreview(ll); return s && s.d <= PROBE_SNAP_M ? { ll: s.ll, far: false } : { ll: null, far: true }; },
     valid: () => !!drag && drag.area === current && drag.nid === selected && canProbe(),
-    onMove: () => { setPreview(discAt(drag.pos)); renderProbeCard(); },   // preview suggestion only; raw cursor is sent
+    onMove: () => { setPreview(discAt(drag.pos, probeR())); renderProbeCard(); },   // preview only; raw cursor is sent
     onEnd: probeEnd });
   if (!ok) return;
   drag = gesture;
   probeState = "dragging"; probeMsg = "";
   map.getSource("blk-hit").setData(empty);
-  setPreview(discAt(c));
+  setPreview(discAt(c, probeR()));
   renderProbeCard();
 }
 async function runProbe(ll, previewAt) {          // ll = raw release point; previewAt = suggested spot to show meanwhile
-  const gen = ++probeGen, area = current, nid = selected;
+  const gen = ++probeGen, area = current, nid = selected, radius = probeR();
   const valid = () => gen === probeGen && current === area && selected === nid && !floodOn && !fireOn;
   probeState = "pending"; probeMsg = "";
-  setPreview(previewAt ? discAt(previewAt) : empty);
+  setPreview(previewAt ? discAt(previewAt, radius) : empty);
   renderProbeCard();
   let d;
   try {
     const r = await fetch(`/api/${area}/nb/${nid}/probe`, { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lon: ll[0], lat: ll[1] }) });
+      body: JSON.stringify({ lon: ll[0], lat: ll[1], radius }) });
     if (!r.ok) throw new Error(`server replied ${r.status}`);
     d = await r.json();
   } catch (err) { d = { ok: false, message: `Couldn't test this blockage (${err.message}).` }; }
   if (!valid()) return;                                // superseded: touch nothing (clearProbe already cleared)
   setPreview(empty);                                   // the authoritative circle comes from the response
-  if (!d.ok) { probeMsg = `${d.message} The blockage went back to where it was.`; probeState = probeShown() ? "done" : "rejected"; renderBlockage(); return; }
+  if (d.ok && d.radius_m !== radius) d = { ok: false, message: "Radius mismatch." };   // never show another radius
+  if (!d.ok) {
+    probeMsg = `${d.message} The blockage went back to where it was.`; probeState = probeShown() ? "done" : "rejected";
+    setProbeRadius(probeShown() ? probe.data.radius_m : SCAN_R);   // the slider always matches what the map shows
+    renderBlockage(); return;
+  }
   probe = { area, nid, data: d }; probeState = "done";
   renderBlockage();
   attention(d.centre);
@@ -1256,6 +1277,22 @@ function fireDragEnd(g, released) {
 map.on("mousedown", "fi-hit", (e) => startFireDrag(e));
 map.on("mouseenter", "fi-hit", () => { if (!gesture && fireOn && fireMode === "hyp") map.getCanvas().style.cursor = "grab"; });
 map.on("mouseleave", "fi-hit", () => { if (!gesture) map.getCanvas().style.cursor = fireOn && fireMode === "hyp" ? "crosshair" : ""; });
+
+// probe radius slider: mid-drag it resizes the preview only; released (no drag) -> ONE probe at the current centre
+$("probeRadius").oninput = (e) => {
+  const r = +e.target.value;
+  setProbeRadius(r);
+  if (drag && gesture === drag) setPreview(discAt(drag.pos, r));
+  else if (canProbe() && probeState !== "pending") { const c = blockageCentre(); if (c) setPreview(discAt(c, r)); }
+};
+$("probeRadius").onchange = (e) => {
+  const r = +e.target.value;
+  if (drag && gesture === drag) { setPreview(discAt(drag.pos, r)); return; }
+  if (!canProbe()) return;
+  if (!probeShown() && r === SCAN_R) { setPreview(empty); return; }   // the scan's own 50 m answer is already shown
+  const c = blockageCentre();
+  if (c) runProbe(c, c);                               // a placed blockage at this centre with the user's radius
+};
 
 for (const l of ["blk-hit", "blocked", "probe-gap"]) {
   map.on("mousedown", l, (e) => startProbeDrag(e));
@@ -1457,11 +1494,17 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
     dragPan: map.dragPan.isEnabled(), radius: fireData && fireData.radius_m, area: fireData && fireData.area,
     card: $("fireOut").textContent.replace(/\s+/g, " ").trim(), gesture: gesture && gesture.kind }),
   probeReset: () => clearProbe(),
+  probeRadius(r, commit = true) {
+    const el = $("probeRadius"); el.value = r; el.dispatchEvent(new Event("input")); if (commit) el.dispatchEvent(new Event("change"));
+  },
+  probeSlider: () => probeR(),
   probeInfo: () => ({ shown: probeShown(), state: probeState, gen: probeGen, dragging: !!drag, msg: probeMsg,
     centre: probe ? probe.data.centre : null, cut: probe ? [probe.data.cut_osm, probe.data.cut_ms] : null,
     card: $("probeCard").textContent.replace(/\s+/g, " ").trim(), badge: $("blkBadge").textContent,
     blocked: map.getFilter("blocked"), cut_filter: map.getFilter("cut"), dragPan: map.dragPan.isEnabled(),
-    probeFeatures: probeShown() ? probe.data.geo.features.length : 0, counts: probe ? probe.data.counts : null }),
+    probeFeatures: probeShown() ? probe.data.geo.features.length : 0, counts: probe ? probe.data.counts : null,
+    radius: probe ? probe.data.radius_m : null, comparable: probe ? probe.data.comparable_with_scan : null,
+    panel: $("panel").textContent.replace(/\s+/g, " ").trim() }),
   topNid: () => { const f = scanData.neighbourhoods.features.find((x) => x.properties.rank === 1); return f ? f.id : null; },
   view: (v, animate = true) => setView(v, animate), viewState: () => ({ view, pitch: map.getPitch(), bearing: map.getBearing(),
     vis3d: map.getLayoutProperty("bld-3d", "visibility"), vis2d: map.getLayoutProperty("bld-fill", "visibility"),
@@ -1490,4 +1533,4 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
              clearVisible: !document.getElementById("clearBtn").classList.contains("hidden") };
   },
 };
-if (["1", "flood", "fire", "3d", "demo", "probe", "motion", "xarea", "firedrag", "trans"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only
+if (["1", "flood", "fire", "3d", "demo", "probe", "motion", "xarea", "firedrag", "trans", "proberadius"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only
