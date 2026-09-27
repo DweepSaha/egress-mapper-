@@ -1,0 +1,57 @@
+{
+ "area": "pointe_sapin",
+ "bbox": [
+  -65.0882,
+  46.74423,
+  -64.7763,
+  47.07787
+ ],
+ "box_km2": 881.3,
+ "assessable_km2": 653.9,
+ "buildings_osm": 147,
+ "buildings_ms": 1540,
+ "road_segments": 191,
+ "counts": {
+  "not_assessed": 2
+ },
+ "n_neighbourhoods": 2,
+ "runtime_load_s": 0.3,
+ "runtime_total_s": 0.3,
+ "peak_mb": 168,
+ "params": {
+  "block_radius_m": 50.0,
+  "sweep_spacing_m": 50.0,
+  "min_homes": 30,
+  "min_footprint_m2": 40.0,
+  "max_assign_m": 150.0,
+  "boundary_buffer_m": 2000
+ },
+ "neighbourhoods": [
+  {
+   "nid": 6,
+   "status": "not_assessed",
+   "homes": 144,
+   "homes_osm": 0,
+   "homes_ms": 144,
+   "gateways": 2,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 53,
+   "status": "not_assessed",
+   "homes": 49,
+   "homes_osm": 0,
+   "homes_ms": 49,
+   "gateways": 3,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  }
+ ]
+}

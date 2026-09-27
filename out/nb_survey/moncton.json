@@ -1,0 +1,2131 @@
+{
+ "area": "moncton",
+ "bbox": [
+  -64.89953,
+  46.00017,
+  -64.64047,
+  46.17983
+ ],
+ "box_km2": 400.1,
+ "assessable_km2": 256.1,
+ "buildings_osm": 39270,
+ "buildings_ms": 37952,
+ "road_segments": 6610,
+ "counts": {
+  "red": 33,
+  "amber": 90,
+  "not_assessed": 10
+ },
+ "n_neighbourhoods": 133,
+ "runtime_load_s": 3.2,
+ "runtime_total_s": 21.8,
+ "peak_mb": 327,
+ "params": {
+  "block_radius_m": 50.0,
+  "sweep_spacing_m": 50.0,
+  "min_homes": 30,
+  "min_footprint_m2": 40.0,
+  "max_assign_m": 150.0,
+  "boundary_buffer_m": 2000
+ },
+ "neighbourhoods": [
+  {
+   "nid": 3,
+   "status": "red",
+   "homes": 32,
+   "homes_osm": 32,
+   "homes_ms": 31,
+   "gateways": 1,
+   "worst_cut": 31,
+   "worst_cut_osm": 31,
+   "worst_cut_ms": 31,
+   "rank": 31,
+   "choke": [
+    -64.719746,
+    46.08783
+   ]
+  },
+  {
+   "nid": 4,
+   "status": "amber",
+   "homes": 90,
+   "homes_osm": 90,
+   "homes_ms": 58,
+   "gateways": 3,
+   "worst_cut": 14,
+   "worst_cut_osm": 14,
+   "worst_cut_ms": 2,
+   "rank": 63,
+   "choke": [
+    -64.707966,
+    46.083231
+   ]
+  },
+  {
+   "nid": 5,
+   "status": "amber",
+   "homes": 207,
+   "homes_osm": 207,
+   "homes_ms": 201,
+   "gateways": 4,
+   "worst_cut": 24,
+   "worst_cut_osm": 24,
+   "worst_cut_ms": 20,
+   "rank": 41,
+   "choke": [
+    -64.724311,
+    46.084928
+   ]
+  },
+  {
+   "nid": 6,
+   "status": "amber",
+   "homes": 185,
+   "homes_osm": 185,
+   "homes_ms": 170,
+   "gateways": 14,
+   "worst_cut": 6,
+   "worst_cut_osm": 6,
+   "worst_cut_ms": 5,
+   "rank": 98,
+   "choke": [
+    -64.786346,
+    46.089311
+   ]
+  },
+  {
+   "nid": 7,
+   "status": "not_assessed",
+   "homes": 840,
+   "homes_osm": 840,
+   "homes_ms": 646,
+   "gateways": 10,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 10,
+   "status": "amber",
+   "homes": 693,
+   "homes_osm": 693,
+   "homes_ms": 405,
+   "gateways": 7,
+   "worst_cut": 22,
+   "worst_cut_osm": 22,
+   "worst_cut_ms": 9,
+   "rank": 46,
+   "choke": [
+    -64.68929,
+    46.098425
+   ]
+  },
+  {
+   "nid": 13,
+   "status": "amber",
+   "homes": 150,
+   "homes_osm": 150,
+   "homes_ms": 140,
+   "gateways": 4,
+   "worst_cut": 7,
+   "worst_cut_osm": 7,
+   "worst_cut_ms": 5,
+   "rank": 85,
+   "choke": [
+    -64.690709,
+    46.080031
+   ]
+  },
+  {
+   "nid": 14,
+   "status": "amber",
+   "homes": 320,
+   "homes_osm": 320,
+   "homes_ms": 274,
+   "gateways": 9,
+   "worst_cut": 25,
+   "worst_cut_osm": 25,
+   "worst_cut_ms": 24,
+   "rank": 36,
+   "choke": [
+    -64.778285,
+    46.105887
+   ]
+  },
+  {
+   "nid": 15,
+   "status": "amber",
+   "homes": 102,
+   "homes_osm": 102,
+   "homes_ms": 88,
+   "gateways": 4,
+   "worst_cut": 19,
+   "worst_cut_osm": 19,
+   "worst_cut_ms": 19,
+   "rank": 54,
+   "choke": [
+    -64.763899,
+    46.107019
+   ]
+  },
+  {
+   "nid": 16,
+   "status": "amber",
+   "homes": 1475,
+   "homes_osm": 1410,
+   "homes_ms": 1475,
+   "gateways": 20,
+   "worst_cut": 25,
+   "worst_cut_osm": 21,
+   "worst_cut_ms": 25,
+   "rank": 37,
+   "choke": [
+    -64.81558,
+    46.109648
+   ]
+  },
+  {
+   "nid": 17,
+   "status": "amber",
+   "homes": 498,
+   "homes_osm": 497,
+   "homes_ms": 498,
+   "gateways": 6,
+   "worst_cut": 28,
+   "worst_cut_osm": 27,
+   "worst_cut_ms": 28,
+   "rank": 34,
+   "choke": [
+    -64.757117,
+    46.111037
+   ]
+  },
+  {
+   "nid": 19,
+   "status": "amber",
+   "homes": 628,
+   "homes_osm": 628,
+   "homes_ms": 613,
+   "gateways": 14,
+   "worst_cut": 16,
+   "worst_cut_osm": 16,
+   "worst_cut_ms": 14,
+   "rank": 58,
+   "choke": [
+    -64.793859,
+    46.057891
+   ]
+  },
+  {
+   "nid": 20,
+   "status": "amber",
+   "homes": 507,
+   "homes_osm": 507,
+   "homes_ms": 502,
+   "gateways": 9,
+   "worst_cut": 14,
+   "worst_cut_osm": 14,
+   "worst_cut_ms": 14,
+   "rank": 64,
+   "choke": [
+    -64.784356,
+    46.053406
+   ]
+  },
+  {
+   "nid": 21,
+   "status": "not_assessed",
+   "homes": 52,
+   "homes_osm": 52,
+   "homes_ms": 47,
+   "gateways": 1,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 24,
+   "status": "not_assessed",
+   "homes": 101,
+   "homes_osm": 95,
+   "homes_ms": 101,
+   "gateways": 2,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 32,
+   "status": "not_assessed",
+   "homes": 179,
+   "homes_osm": 179,
+   "homes_ms": 70,
+   "gateways": 1,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 33,
+   "status": "not_assessed",
+   "homes": 137,
+   "homes_osm": 131,
+   "homes_ms": 137,
+   "gateways": 5,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 37,
+   "status": "amber",
+   "homes": 42,
+   "homes_osm": 40,
+   "homes_ms": 42,
+   "gateways": 3,
+   "worst_cut": 4,
+   "worst_cut_osm": 3,
+   "worst_cut_ms": 4,
+   "rank": 108,
+   "choke": [
+    -64.827707,
+    46.076412
+   ]
+  },
+  {
+   "nid": 38,
+   "status": "amber",
+   "homes": 64,
+   "homes_osm": 62,
+   "homes_ms": 64,
+   "gateways": 3,
+   "worst_cut": 20,
+   "worst_cut_osm": 17,
+   "worst_cut_ms": 20,
+   "rank": 53,
+   "choke": [
+    -64.832793,
+    46.067422
+   ]
+  },
+  {
+   "nid": 39,
+   "status": "amber",
+   "homes": 525,
+   "homes_osm": 446,
+   "homes_ms": 525,
+   "gateways": 7,
+   "worst_cut": 15,
+   "worst_cut_osm": 15,
+   "worst_cut_ms": 15,
+   "rank": 60,
+   "choke": [
+    -64.818308,
+    46.081519
+   ]
+  },
+  {
+   "nid": 42,
+   "status": "red",
+   "homes": 191,
+   "homes_osm": 191,
+   "homes_ms": 187,
+   "gateways": 1,
+   "worst_cut": 191,
+   "worst_cut_osm": 191,
+   "worst_cut_ms": 187,
+   "rank": 3,
+   "choke": [
+    -64.821033,
+    46.083001
+   ]
+  },
+  {
+   "nid": 43,
+   "status": "red",
+   "homes": 147,
+   "homes_osm": 147,
+   "homes_ms": 88,
+   "gateways": 4,
+   "worst_cut": 32,
+   "worst_cut_osm": 32,
+   "worst_cut_ms": 26,
+   "rank": 30,
+   "choke": [
+    -64.838473,
+    46.069081
+   ]
+  },
+  {
+   "nid": 44,
+   "status": "amber",
+   "homes": 133,
+   "homes_osm": 123,
+   "homes_ms": 133,
+   "gateways": 3,
+   "worst_cut": 22,
+   "worst_cut_osm": 21,
+   "worst_cut_ms": 22,
+   "rank": 47,
+   "choke": [
+    -64.845139,
+    46.059655
+   ]
+  },
+  {
+   "nid": 46,
+   "status": "amber",
+   "homes": 577,
+   "homes_osm": 577,
+   "homes_ms": 576,
+   "gateways": 16,
+   "worst_cut": 25,
+   "worst_cut_osm": 24,
+   "worst_cut_ms": 25,
+   "rank": 38,
+   "choke": [
+    -64.806907,
+    46.083386
+   ]
+  },
+  {
+   "nid": 52,
+   "status": "amber",
+   "homes": 98,
+   "homes_osm": 98,
+   "homes_ms": 94,
+   "gateways": 3,
+   "worst_cut": 21,
+   "worst_cut_osm": 21,
+   "worst_cut_ms": 16,
+   "rank": 50,
+   "choke": [
+    -64.818534,
+    46.062983
+   ]
+  },
+  {
+   "nid": 54,
+   "status": "amber",
+   "homes": 333,
+   "homes_osm": 328,
+   "homes_ms": 333,
+   "gateways": 5,
+   "worst_cut": 7,
+   "worst_cut_osm": 6,
+   "worst_cut_ms": 7,
+   "rank": 86,
+   "choke": [
+    -64.846243,
+    46.111303
+   ]
+  },
+  {
+   "nid": 55,
+   "status": "amber",
+   "homes": 214,
+   "homes_osm": 210,
+   "homes_ms": 214,
+   "gateways": 11,
+   "worst_cut": 4,
+   "worst_cut_osm": 4,
+   "worst_cut_ms": 0,
+   "rank": 109,
+   "choke": [
+    -64.817111,
+    46.099034
+   ]
+  },
+  {
+   "nid": 56,
+   "status": "amber",
+   "homes": 63,
+   "homes_osm": 60,
+   "homes_ms": 63,
+   "gateways": 5,
+   "worst_cut": 7,
+   "worst_cut_osm": 5,
+   "worst_cut_ms": 7,
+   "rank": 87,
+   "choke": [
+    -64.814904,
+    46.096637
+   ]
+  },
+  {
+   "nid": 57,
+   "status": "amber",
+   "homes": 167,
+   "homes_osm": 167,
+   "homes_ms": 161,
+   "gateways": 15,
+   "worst_cut": 3,
+   "worst_cut_osm": 2,
+   "worst_cut_ms": 3,
+   "rank": 117,
+   "choke": [
+    -64.81317,
+    46.0982
+   ]
+  },
+  {
+   "nid": 58,
+   "status": "amber",
+   "homes": 1185,
+   "homes_osm": 1185,
+   "homes_ms": 1164,
+   "gateways": 13,
+   "worst_cut": 25,
+   "worst_cut_osm": 25,
+   "worst_cut_ms": 22,
+   "rank": 39,
+   "choke": [
+    -64.852439,
+    46.110795
+   ]
+  },
+  {
+   "nid": 59,
+   "status": "red",
+   "homes": 631,
+   "homes_osm": 631,
+   "homes_ms": 625,
+   "gateways": 9,
+   "worst_cut": 49,
+   "worst_cut_osm": 45,
+   "worst_cut_ms": 49,
+   "rank": 18,
+   "choke": [
+    -64.839657,
+    46.118876
+   ]
+  },
+  {
+   "nid": 60,
+   "status": "amber",
+   "homes": 710,
+   "homes_osm": 710,
+   "homes_ms": 701,
+   "gateways": 9,
+   "worst_cut": 14,
+   "worst_cut_osm": 14,
+   "worst_cut_ms": 14,
+   "rank": 65,
+   "choke": [
+    -64.834086,
+    46.102651
+   ]
+  },
+  {
+   "nid": 61,
+   "status": "amber",
+   "homes": 530,
+   "homes_osm": 512,
+   "homes_ms": 530,
+   "gateways": 18,
+   "worst_cut": 7,
+   "worst_cut_osm": 5,
+   "worst_cut_ms": 7,
+   "rank": 88,
+   "choke": [
+    -64.822396,
+    46.098406
+   ]
+  },
+  {
+   "nid": 62,
+   "status": "amber",
+   "homes": 418,
+   "homes_osm": 418,
+   "homes_ms": 334,
+   "gateways": 4,
+   "worst_cut": 18,
+   "worst_cut_osm": 17,
+   "worst_cut_ms": 18,
+   "rank": 56,
+   "choke": [
+    -64.858759,
+    46.103523
+   ]
+  },
+  {
+   "nid": 65,
+   "status": "amber",
+   "homes": 599,
+   "homes_osm": 599,
+   "homes_ms": 586,
+   "gateways": 13,
+   "worst_cut": 21,
+   "worst_cut_osm": 21,
+   "worst_cut_ms": 20,
+   "rank": 51,
+   "choke": [
+    -64.86472,
+    46.118518
+   ]
+  },
+  {
+   "nid": 66,
+   "status": "amber",
+   "homes": 102,
+   "homes_osm": 95,
+   "homes_ms": 102,
+   "gateways": 2,
+   "worst_cut": 16,
+   "worst_cut_osm": 15,
+   "worst_cut_ms": 16,
+   "rank": 59,
+   "choke": [
+    -64.826632,
+    46.110625
+   ]
+  },
+  {
+   "nid": 67,
+   "status": "red",
+   "homes": 134,
+   "homes_osm": 134,
+   "homes_ms": 53,
+   "gateways": 1,
+   "worst_cut": 133,
+   "worst_cut_osm": 133,
+   "worst_cut_ms": 53,
+   "rank": 4,
+   "choke": [
+    -64.845757,
+    46.120915
+   ]
+  },
+  {
+   "nid": 70,
+   "status": "amber",
+   "homes": 135,
+   "homes_osm": 135,
+   "homes_ms": 132,
+   "gateways": 2,
+   "worst_cut": 13,
+   "worst_cut_osm": 13,
+   "worst_cut_ms": 11,
+   "rank": 69,
+   "choke": [
+    -64.843756,
+    46.097198
+   ]
+  },
+  {
+   "nid": 74,
+   "status": "red",
+   "homes": 50,
+   "homes_osm": 50,
+   "homes_ms": 38,
+   "gateways": 1,
+   "worst_cut": 50,
+   "worst_cut_osm": 50,
+   "worst_cut_ms": 38,
+   "rank": 17,
+   "choke": [
+    -64.860277,
+    46.098919
+   ]
+  },
+  {
+   "nid": 75,
+   "status": "not_assessed",
+   "homes": 168,
+   "homes_osm": 168,
+   "homes_ms": 41,
+   "gateways": 2,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 79,
+   "status": "amber",
+   "homes": 79,
+   "homes_osm": 79,
+   "homes_ms": 51,
+   "gateways": 3,
+   "worst_cut": 7,
+   "worst_cut_osm": 6,
+   "worst_cut_ms": 7,
+   "rank": 89,
+   "choke": [
+    -64.868495,
+    46.107509
+   ]
+  },
+  {
+   "nid": 81,
+   "status": "amber",
+   "homes": 977,
+   "homes_osm": 977,
+   "homes_ms": 892,
+   "gateways": 13,
+   "worst_cut": 15,
+   "worst_cut_osm": 14,
+   "worst_cut_ms": 15,
+   "rank": 61,
+   "choke": [
+    -64.727588,
+    46.108664
+   ]
+  },
+  {
+   "nid": 82,
+   "status": "amber",
+   "homes": 50,
+   "homes_osm": 50,
+   "homes_ms": 49,
+   "gateways": 3,
+   "worst_cut": 3,
+   "worst_cut_osm": 2,
+   "worst_cut_ms": 3,
+   "rank": 118,
+   "choke": [
+    -64.749665,
+    46.109222
+   ]
+  },
+  {
+   "nid": 83,
+   "status": "amber",
+   "homes": 117,
+   "homes_osm": 117,
+   "homes_ms": 108,
+   "gateways": 7,
+   "worst_cut": 11,
+   "worst_cut_osm": 11,
+   "worst_cut_ms": 6,
+   "rank": 74,
+   "choke": [
+    -64.747409,
+    46.093353
+   ]
+  },
+  {
+   "nid": 84,
+   "status": "amber",
+   "homes": 332,
+   "homes_osm": 317,
+   "homes_ms": 332,
+   "gateways": 5,
+   "worst_cut": 14,
+   "worst_cut_osm": 11,
+   "worst_cut_ms": 14,
+   "rank": 66,
+   "choke": [
+    -64.768154,
+    46.117294
+   ]
+  },
+  {
+   "nid": 86,
+   "status": "amber",
+   "homes": 255,
+   "homes_osm": 255,
+   "homes_ms": 233,
+   "gateways": 5,
+   "worst_cut": 14,
+   "worst_cut_osm": 14,
+   "worst_cut_ms": 13,
+   "rank": 67,
+   "choke": [
+    -64.771951,
+    46.106695
+   ]
+  },
+  {
+   "nid": 87,
+   "status": "amber",
+   "homes": 483,
+   "homes_osm": 483,
+   "homes_ms": 453,
+   "gateways": 26,
+   "worst_cut": 7,
+   "worst_cut_osm": 5,
+   "worst_cut_ms": 7,
+   "rank": 90,
+   "choke": [
+    -64.791387,
+    46.094569
+   ]
+  },
+  {
+   "nid": 88,
+   "status": "amber",
+   "homes": 963,
+   "homes_osm": 958,
+   "homes_ms": 963,
+   "gateways": 22,
+   "worst_cut": 7,
+   "worst_cut_osm": 5,
+   "worst_cut_ms": 7,
+   "rank": 91,
+   "choke": [
+    -64.796427,
+    46.103634
+   ]
+  },
+  {
+   "nid": 89,
+   "status": "amber",
+   "homes": 233,
+   "homes_osm": 223,
+   "homes_ms": 233,
+   "gateways": 10,
+   "worst_cut": 12,
+   "worst_cut_osm": 10,
+   "worst_cut_ms": 12,
+   "rank": 72,
+   "choke": [
+    -64.780045,
+    46.116655
+   ]
+  },
+  {
+   "nid": 90,
+   "status": "amber",
+   "homes": 78,
+   "homes_osm": 74,
+   "homes_ms": 78,
+   "gateways": 3,
+   "worst_cut": 7,
+   "worst_cut_osm": 7,
+   "worst_cut_ms": 7,
+   "rank": 92,
+   "choke": [
+    -64.77297,
+    46.123407
+   ]
+  },
+  {
+   "nid": 91,
+   "status": "amber",
+   "homes": 94,
+   "homes_osm": 83,
+   "homes_ms": 94,
+   "gateways": 4,
+   "worst_cut": 9,
+   "worst_cut_osm": 9,
+   "worst_cut_ms": 8,
+   "rank": 77,
+   "choke": [
+    -64.772575,
+    46.125556
+   ]
+  },
+  {
+   "nid": 92,
+   "status": "amber",
+   "homes": 359,
+   "homes_osm": 351,
+   "homes_ms": 359,
+   "gateways": 5,
+   "worst_cut": 13,
+   "worst_cut_osm": 11,
+   "worst_cut_ms": 13,
+   "rank": 70,
+   "choke": [
+    -64.78236,
+    46.125036
+   ]
+  },
+  {
+   "nid": 94,
+   "status": "red",
+   "homes": 727,
+   "homes_osm": 727,
+   "homes_ms": 658,
+   "gateways": 8,
+   "worst_cut": 31,
+   "worst_cut_osm": 31,
+   "worst_cut_ms": 30,
+   "rank": 32,
+   "choke": [
+    -64.744796,
+    46.10207
+   ]
+  },
+  {
+   "nid": 95,
+   "status": "red",
+   "homes": 52,
+   "homes_osm": 52,
+   "homes_ms": 38,
+   "gateways": 2,
+   "worst_cut": 49,
+   "worst_cut_osm": 49,
+   "worst_cut_ms": 35,
+   "rank": 19,
+   "choke": [
+    -64.772054,
+    46.101251
+   ]
+  },
+  {
+   "nid": 97,
+   "status": "amber",
+   "homes": 54,
+   "homes_osm": 54,
+   "homes_ms": 45,
+   "gateways": 3,
+   "worst_cut": 4,
+   "worst_cut_osm": 4,
+   "worst_cut_ms": 2,
+   "rank": 110,
+   "choke": [
+    -64.765059,
+    46.103587
+   ]
+  },
+  {
+   "nid": 99,
+   "status": "red",
+   "homes": 95,
+   "homes_osm": 95,
+   "homes_ms": 70,
+   "gateways": 2,
+   "worst_cut": 56,
+   "worst_cut_osm": 56,
+   "worst_cut_ms": 34,
+   "rank": 13,
+   "choke": [
+    -64.789471,
+    46.121194
+   ]
+  },
+  {
+   "nid": 101,
+   "status": "amber",
+   "homes": 518,
+   "homes_osm": 518,
+   "homes_ms": 447,
+   "gateways": 24,
+   "worst_cut": 10,
+   "worst_cut_osm": 7,
+   "worst_cut_ms": 10,
+   "rank": 76,
+   "choke": [
+    -64.792728,
+    46.090458
+   ]
+  },
+  {
+   "nid": 104,
+   "status": "amber",
+   "homes": 167,
+   "homes_osm": 167,
+   "homes_ms": 152,
+   "gateways": 7,
+   "worst_cut": 6,
+   "worst_cut_osm": 6,
+   "worst_cut_ms": 5,
+   "rank": 99,
+   "choke": [
+    -64.781834,
+    46.096847
+   ]
+  },
+  {
+   "nid": 105,
+   "status": "amber",
+   "homes": 113,
+   "homes_osm": 113,
+   "homes_ms": 100,
+   "gateways": 7,
+   "worst_cut": 24,
+   "worst_cut_osm": 24,
+   "worst_cut_ms": 20,
+   "rank": 42,
+   "choke": [
+    -64.773902,
+    46.095222
+   ]
+  },
+  {
+   "nid": 108,
+   "status": "amber",
+   "homes": 156,
+   "homes_osm": 156,
+   "homes_ms": 152,
+   "gateways": 4,
+   "worst_cut": 8,
+   "worst_cut_osm": 5,
+   "worst_cut_ms": 8,
+   "rank": 82,
+   "choke": [
+    -64.78221,
+    46.120316
+   ]
+  },
+  {
+   "nid": 110,
+   "status": "amber",
+   "homes": 72,
+   "homes_osm": 72,
+   "homes_ms": 67,
+   "gateways": 13,
+   "worst_cut": 3,
+   "worst_cut_osm": 3,
+   "worst_cut_ms": 0,
+   "rank": 119,
+   "choke": [
+    -64.775869,
+    46.091575
+   ]
+  },
+  {
+   "nid": 113,
+   "status": "red",
+   "homes": 42,
+   "homes_osm": 42,
+   "homes_ms": 31,
+   "gateways": 1,
+   "worst_cut": 42,
+   "worst_cut_osm": 42,
+   "worst_cut_ms": 31,
+   "rank": 23,
+   "choke": [
+    -64.767792,
+    46.104815
+   ]
+  },
+  {
+   "nid": 115,
+   "status": "amber",
+   "homes": 35,
+   "homes_osm": 35,
+   "homes_ms": 35,
+   "gateways": 2,
+   "worst_cut": 3,
+   "worst_cut_osm": 2,
+   "worst_cut_ms": 3,
+   "rank": 120,
+   "choke": [
+    -64.75844,
+    46.100767
+   ]
+  },
+  {
+   "nid": 135,
+   "status": "amber",
+   "homes": 318,
+   "homes_osm": 318,
+   "homes_ms": 311,
+   "gateways": 3,
+   "worst_cut": 7,
+   "worst_cut_osm": 7,
+   "worst_cut_ms": 7,
+   "rank": 93,
+   "choke": [
+    -64.76052,
+    46.079256
+   ]
+  },
+  {
+   "nid": 136,
+   "status": "amber",
+   "homes": 58,
+   "homes_osm": 58,
+   "homes_ms": 52,
+   "gateways": 8,
+   "worst_cut": 4,
+   "worst_cut_osm": 3,
+   "worst_cut_ms": 4,
+   "rank": 111,
+   "choke": [
+    -64.783443,
+    46.089587
+   ]
+  },
+  {
+   "nid": 137,
+   "status": "amber",
+   "homes": 73,
+   "homes_osm": 73,
+   "homes_ms": 56,
+   "gateways": 10,
+   "worst_cut": 5,
+   "worst_cut_osm": 5,
+   "worst_cut_ms": 0,
+   "rank": 105,
+   "choke": [
+    -64.777886,
+    46.090992
+   ]
+  },
+  {
+   "nid": 138,
+   "status": "red",
+   "homes": 439,
+   "homes_osm": 418,
+   "homes_ms": 439,
+   "gateways": 10,
+   "worst_cut": 70,
+   "worst_cut_osm": 63,
+   "worst_cut_ms": 70,
+   "rank": 11,
+   "choke": [
+    -64.773405,
+    46.071346
+   ]
+  },
+  {
+   "nid": 139,
+   "status": "amber",
+   "homes": 486,
+   "homes_osm": 486,
+   "homes_ms": 478,
+   "gateways": 11,
+   "worst_cut": 7,
+   "worst_cut_osm": 7,
+   "worst_cut_ms": 2,
+   "rank": 94,
+   "choke": [
+    -64.799256,
+    46.085474
+   ]
+  },
+  {
+   "nid": 140,
+   "status": "red",
+   "homes": 31,
+   "homes_osm": 31,
+   "homes_ms": 24,
+   "gateways": 2,
+   "worst_cut": 30,
+   "worst_cut_osm": 30,
+   "worst_cut_ms": 23,
+   "rank": 33,
+   "choke": [
+    -64.792541,
+    46.083441
+   ]
+  },
+  {
+   "nid": 141,
+   "status": "amber",
+   "homes": 179,
+   "homes_osm": 179,
+   "homes_ms": 178,
+   "gateways": 7,
+   "worst_cut": 13,
+   "worst_cut_osm": 13,
+   "worst_cut_ms": 9,
+   "rank": 71,
+   "choke": [
+    -64.802432,
+    46.088475
+   ]
+  },
+  {
+   "nid": 142,
+   "status": "amber",
+   "homes": 45,
+   "homes_osm": 43,
+   "homes_ms": 45,
+   "gateways": 4,
+   "worst_cut": 8,
+   "worst_cut_osm": 7,
+   "worst_cut_ms": 8,
+   "rank": 83,
+   "choke": [
+    -64.763726,
+    46.073347
+   ]
+  },
+  {
+   "nid": 145,
+   "status": "amber",
+   "homes": 372,
+   "homes_osm": 372,
+   "homes_ms": 195,
+   "gateways": 6,
+   "worst_cut": 17,
+   "worst_cut_osm": 17,
+   "worst_cut_ms": 9,
+   "rank": 57,
+   "choke": [
+    -64.752385,
+    46.069985
+   ]
+  },
+  {
+   "nid": 165,
+   "status": "amber",
+   "homes": 821,
+   "homes_osm": 775,
+   "homes_ms": 821,
+   "gateways": 11,
+   "worst_cut": 23,
+   "worst_cut_osm": 23,
+   "worst_cut_ms": 22,
+   "rank": 43,
+   "choke": [
+    -64.816177,
+    46.055399
+   ]
+  },
+  {
+   "nid": 166,
+   "status": "red",
+   "homes": 77,
+   "homes_osm": 77,
+   "homes_ms": 77,
+   "gateways": 2,
+   "worst_cut": 75,
+   "worst_cut_osm": 75,
+   "worst_cut_ms": 75,
+   "rank": 10,
+   "choke": [
+    -64.74599,
+    46.067301
+   ]
+  },
+  {
+   "nid": 168,
+   "status": "amber",
+   "homes": 206,
+   "homes_osm": 206,
+   "homes_ms": 162,
+   "gateways": 4,
+   "worst_cut": 7,
+   "worst_cut_osm": 7,
+   "worst_cut_ms": 3,
+   "rank": 95,
+   "choke": [
+    -64.805496,
+    46.04262
+   ]
+  },
+  {
+   "nid": 169,
+   "status": "amber",
+   "homes": 321,
+   "homes_osm": 321,
+   "homes_ms": 303,
+   "gateways": 4,
+   "worst_cut": 5,
+   "worst_cut_osm": 5,
+   "worst_cut_ms": 5,
+   "rank": 106,
+   "choke": [
+    -64.806851,
+    46.049977
+   ]
+  },
+  {
+   "nid": 170,
+   "status": "amber",
+   "homes": 90,
+   "homes_osm": 85,
+   "homes_ms": 90,
+   "gateways": 3,
+   "worst_cut": 3,
+   "worst_cut_osm": 2,
+   "worst_cut_ms": 3,
+   "rank": 121,
+   "choke": [
+    -64.808306,
+    46.051645
+   ]
+  },
+  {
+   "nid": 173,
+   "status": "red",
+   "homes": 139,
+   "homes_osm": 139,
+   "homes_ms": 66,
+   "gateways": 4,
+   "worst_cut": 52,
+   "worst_cut_osm": 52,
+   "worst_cut_ms": 20,
+   "rank": 15,
+   "choke": [
+    -64.848772,
+    46.048367
+   ]
+  },
+  {
+   "nid": 174,
+   "status": "red",
+   "homes": 84,
+   "homes_osm": 84,
+   "homes_ms": 33,
+   "gateways": 1,
+   "worst_cut": 84,
+   "worst_cut_osm": 84,
+   "worst_cut_ms": 33,
+   "rank": 5,
+   "choke": [
+    -64.861024,
+    46.047054
+   ]
+  },
+  {
+   "nid": 175,
+   "status": "red",
+   "homes": 344,
+   "homes_osm": 344,
+   "homes_ms": 330,
+   "gateways": 5,
+   "worst_cut": 78,
+   "worst_cut_osm": 78,
+   "worst_cut_ms": 76,
+   "rank": 9,
+   "choke": [
+    -64.822527,
+    46.052656
+   ]
+  },
+  {
+   "nid": 177,
+   "status": "amber",
+   "homes": 69,
+   "homes_osm": 69,
+   "homes_ms": 58,
+   "gateways": 2,
+   "worst_cut": 4,
+   "worst_cut_osm": 3,
+   "worst_cut_ms": 4,
+   "rank": 112,
+   "choke": [
+    -64.809433,
+    46.041533
+   ]
+  },
+  {
+   "nid": 178,
+   "status": "amber",
+   "homes": 182,
+   "homes_osm": 182,
+   "homes_ms": 109,
+   "gateways": 2,
+   "worst_cut": 7,
+   "worst_cut_osm": 7,
+   "worst_cut_ms": 6,
+   "rank": 96,
+   "choke": [
+    -64.859233,
+    46.056435
+   ]
+  },
+  {
+   "nid": 182,
+   "status": "red",
+   "homes": 243,
+   "homes_osm": 243,
+   "homes_ms": 99,
+   "gateways": 2,
+   "worst_cut": 243,
+   "worst_cut_osm": 243,
+   "worst_cut_ms": 99,
+   "rank": 1,
+   "choke": [
+    -64.785326,
+    46.040239
+   ]
+  },
+  {
+   "nid": 184,
+   "status": "amber",
+   "homes": 126,
+   "homes_osm": 126,
+   "homes_ms": 108,
+   "gateways": 3,
+   "worst_cut": 15,
+   "worst_cut_osm": 15,
+   "worst_cut_ms": 13,
+   "rank": 62,
+   "choke": [
+    -64.786942,
+    46.05139
+   ]
+  },
+  {
+   "nid": 185,
+   "status": "amber",
+   "homes": 233,
+   "homes_osm": 233,
+   "homes_ms": 212,
+   "gateways": 2,
+   "worst_cut": 6,
+   "worst_cut_osm": 6,
+   "worst_cut_ms": 6,
+   "rank": 100,
+   "choke": [
+    -64.812735,
+    46.046648
+   ]
+  },
+  {
+   "nid": 187,
+   "status": "red",
+   "homes": 82,
+   "homes_osm": 77,
+   "homes_ms": 82,
+   "gateways": 1,
+   "worst_cut": 82,
+   "worst_cut_osm": 77,
+   "worst_cut_ms": 82,
+   "rank": 6,
+   "choke": [
+    -64.85082,
+    46.060427
+   ]
+  },
+  {
+   "nid": 188,
+   "status": "amber",
+   "homes": 153,
+   "homes_osm": 153,
+   "homes_ms": 153,
+   "gateways": 3,
+   "worst_cut": 9,
+   "worst_cut_osm": 9,
+   "worst_cut_ms": 9,
+   "rank": 78,
+   "choke": [
+    -64.841936,
+    46.049806
+   ]
+  },
+  {
+   "nid": 191,
+   "status": "amber",
+   "homes": 209,
+   "homes_osm": 209,
+   "homes_ms": 192,
+   "gateways": 3,
+   "worst_cut": 6,
+   "worst_cut_osm": 6,
+   "worst_cut_ms": 5,
+   "rank": 101,
+   "choke": [
+    -64.81701,
+    46.048275
+   ]
+  },
+  {
+   "nid": 198,
+   "status": "amber",
+   "homes": 90,
+   "homes_osm": 83,
+   "homes_ms": 90,
+   "gateways": 2,
+   "worst_cut": 6,
+   "worst_cut_osm": 2,
+   "worst_cut_ms": 6,
+   "rank": 102,
+   "choke": [
+    -64.814287,
+    46.051012
+   ]
+  },
+  {
+   "nid": 201,
+   "status": "amber",
+   "homes": 61,
+   "homes_osm": 55,
+   "homes_ms": 61,
+   "gateways": 2,
+   "worst_cut": 4,
+   "worst_cut_osm": 3,
+   "worst_cut_ms": 4,
+   "rank": 113,
+   "choke": [
+    -64.802157,
+    46.048455
+   ]
+  },
+  {
+   "nid": 203,
+   "status": "amber",
+   "homes": 129,
+   "homes_osm": 129,
+   "homes_ms": 85,
+   "gateways": 2,
+   "worst_cut": 11,
+   "worst_cut_osm": 11,
+   "worst_cut_ms": 6,
+   "rank": 75,
+   "choke": [
+    -64.803334,
+    46.03887
+   ]
+  },
+  {
+   "nid": 209,
+   "status": "amber",
+   "homes": 88,
+   "homes_osm": 0,
+   "homes_ms": 88,
+   "gateways": 5,
+   "worst_cut": 8,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 8,
+   "rank": 84,
+   "choke": [
+    -64.731373,
+    46.028631
+   ]
+  },
+  {
+   "nid": 210,
+   "status": "amber",
+   "homes": 156,
+   "homes_osm": 1,
+   "homes_ms": 156,
+   "gateways": 5,
+   "worst_cut": 5,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 5,
+   "rank": 107,
+   "choke": [
+    -64.728016,
+    46.036533
+   ]
+  },
+  {
+   "nid": 223,
+   "status": "amber",
+   "homes": 834,
+   "homes_osm": 834,
+   "homes_ms": 701,
+   "gateways": 2,
+   "worst_cut": 22,
+   "worst_cut_osm": 22,
+   "worst_cut_ms": 18,
+   "rank": 48,
+   "choke": [
+    -64.785558,
+    46.143022
+   ]
+  },
+  {
+   "nid": 224,
+   "status": "red",
+   "homes": 215,
+   "homes_osm": 213,
+   "homes_ms": 215,
+   "gateways": 1,
+   "worst_cut": 215,
+   "worst_cut_osm": 213,
+   "worst_cut_ms": 215,
+   "rank": 2,
+   "choke": [
+    -64.832953,
+    46.12999
+   ]
+  },
+  {
+   "nid": 226,
+   "status": "not_assessed",
+   "homes": 184,
+   "homes_osm": 184,
+   "homes_ms": 147,
+   "gateways": 2,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 227,
+   "status": "red",
+   "homes": 90,
+   "homes_osm": 89,
+   "homes_ms": 90,
+   "gateways": 5,
+   "worst_cut": 36,
+   "worst_cut_osm": 29,
+   "worst_cut_ms": 36,
+   "rank": 28,
+   "choke": [
+    -64.758465,
+    46.133978
+   ]
+  },
+  {
+   "nid": 229,
+   "status": "not_assessed",
+   "homes": 105,
+   "homes_osm": 105,
+   "homes_ms": 92,
+   "gateways": 4,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 240,
+   "status": "not_assessed",
+   "homes": 297,
+   "homes_osm": 8,
+   "homes_ms": 297,
+   "gateways": 3,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 250,
+   "status": "amber",
+   "homes": 175,
+   "homes_osm": 175,
+   "homes_ms": 172,
+   "gateways": 2,
+   "worst_cut": 23,
+   "worst_cut_osm": 21,
+   "worst_cut_ms": 23,
+   "rank": 44,
+   "choke": [
+    -64.713359,
+    46.063011
+   ]
+  },
+  {
+   "nid": 251,
+   "status": "amber",
+   "homes": 160,
+   "homes_osm": 160,
+   "homes_ms": 116,
+   "gateways": 2,
+   "worst_cut": 12,
+   "worst_cut_osm": 12,
+   "worst_cut_ms": 11,
+   "rank": 73,
+   "choke": [
+    -64.689781,
+    46.044827
+   ]
+  },
+  {
+   "nid": 253,
+   "status": "red",
+   "homes": 36,
+   "homes_osm": 34,
+   "homes_ms": 36,
+   "gateways": 1,
+   "worst_cut": 36,
+   "worst_cut_osm": 34,
+   "worst_cut_ms": 36,
+   "rank": 29,
+   "choke": [
+    -64.745092,
+    46.066688
+   ]
+  },
+  {
+   "nid": 255,
+   "status": "not_assessed",
+   "homes": 45,
+   "homes_osm": 0,
+   "homes_ms": 45,
+   "gateways": 2,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 256,
+   "status": "red",
+   "homes": 49,
+   "homes_osm": 0,
+   "homes_ms": 49,
+   "gateways": 1,
+   "worst_cut": 49,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 49,
+   "rank": 20,
+   "choke": [
+    -64.712357,
+    46.026179
+   ]
+  },
+  {
+   "nid": 257,
+   "status": "red",
+   "homes": 80,
+   "homes_osm": 0,
+   "homes_ms": 80,
+   "gateways": 1,
+   "worst_cut": 80,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 80,
+   "rank": 7,
+   "choke": [
+    -64.721846,
+    46.040025
+   ]
+  },
+  {
+   "nid": 259,
+   "status": "red",
+   "homes": 46,
+   "homes_osm": 0,
+   "homes_ms": 46,
+   "gateways": 1,
+   "worst_cut": 45,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 45,
+   "rank": 22,
+   "choke": [
+    -64.711924,
+    46.024957
+   ]
+  },
+  {
+   "nid": 261,
+   "status": "red",
+   "homes": 48,
+   "homes_osm": 45,
+   "homes_ms": 48,
+   "gateways": 1,
+   "worst_cut": 48,
+   "worst_cut_osm": 44,
+   "worst_cut_ms": 48,
+   "rank": 21,
+   "choke": [
+    -64.6693,
+    46.048547
+   ]
+  },
+  {
+   "nid": 263,
+   "status": "red",
+   "homes": 243,
+   "homes_osm": 243,
+   "homes_ms": 233,
+   "gateways": 3,
+   "worst_cut": 52,
+   "worst_cut_osm": 52,
+   "worst_cut_ms": 49,
+   "rank": 16,
+   "choke": [
+    -64.701685,
+    46.06256
+   ]
+  },
+  {
+   "nid": 265,
+   "status": "red",
+   "homes": 38,
+   "homes_osm": 36,
+   "homes_ms": 38,
+   "gateways": 1,
+   "worst_cut": 38,
+   "worst_cut_osm": 36,
+   "worst_cut_ms": 38,
+   "rank": 26,
+   "choke": [
+    -64.690047,
+    46.040609
+   ]
+  },
+  {
+   "nid": 273,
+   "status": "amber",
+   "homes": 641,
+   "homes_osm": 641,
+   "homes_ms": 639,
+   "gateways": 9,
+   "worst_cut": 27,
+   "worst_cut_osm": 27,
+   "worst_cut_ms": 27,
+   "rank": 35,
+   "choke": [
+    -64.720285,
+    46.075076
+   ]
+  },
+  {
+   "nid": 274,
+   "status": "amber",
+   "homes": 322,
+   "homes_osm": 322,
+   "homes_ms": 304,
+   "gateways": 6,
+   "worst_cut": 21,
+   "worst_cut_osm": 21,
+   "worst_cut_ms": 20,
+   "rank": 52,
+   "choke": [
+    -64.706754,
+    46.078294
+   ]
+  },
+  {
+   "nid": 276,
+   "status": "amber",
+   "homes": 126,
+   "homes_osm": 126,
+   "homes_ms": 110,
+   "gateways": 2,
+   "worst_cut": 6,
+   "worst_cut_osm": 6,
+   "worst_cut_ms": 5,
+   "rank": 103,
+   "choke": [
+    -64.702454,
+    46.074774
+   ]
+  },
+  {
+   "nid": 277,
+   "status": "amber",
+   "homes": 224,
+   "homes_osm": 224,
+   "homes_ms": 164,
+   "gateways": 5,
+   "worst_cut": 14,
+   "worst_cut_osm": 14,
+   "worst_cut_ms": 14,
+   "rank": 68,
+   "choke": [
+    -64.698141,
+    46.070014
+   ]
+  },
+  {
+   "nid": 278,
+   "status": "amber",
+   "homes": 554,
+   "homes_osm": 554,
+   "homes_ms": 496,
+   "gateways": 8,
+   "worst_cut": 19,
+   "worst_cut_osm": 19,
+   "worst_cut_ms": 12,
+   "rank": 55,
+   "choke": [
+    -64.717137,
+    46.094054
+   ]
+  },
+  {
+   "nid": 279,
+   "status": "red",
+   "homes": 39,
+   "homes_osm": 39,
+   "homes_ms": 24,
+   "gateways": 1,
+   "worst_cut": 39,
+   "worst_cut_osm": 39,
+   "worst_cut_ms": 24,
+   "rank": 25,
+   "choke": [
+    -64.700589,
+    46.089755
+   ]
+  },
+  {
+   "nid": 281,
+   "status": "amber",
+   "homes": 185,
+   "homes_osm": 185,
+   "homes_ms": 43,
+   "gateways": 5,
+   "worst_cut": 4,
+   "worst_cut_osm": 4,
+   "worst_cut_ms": 0,
+   "rank": 114,
+   "choke": [
+    -64.679971,
+    46.100035
+   ]
+  },
+  {
+   "nid": 283,
+   "status": "red",
+   "homes": 662,
+   "homes_osm": 662,
+   "homes_ms": 525,
+   "gateways": 5,
+   "worst_cut": 63,
+   "worst_cut_osm": 63,
+   "worst_cut_ms": 15,
+   "rank": 12,
+   "choke": [
+    -64.735727,
+    46.118461
+   ]
+  },
+  {
+   "nid": 284,
+   "status": "amber",
+   "homes": 30,
+   "homes_osm": 30,
+   "homes_ms": 27,
+   "gateways": 3,
+   "worst_cut": 9,
+   "worst_cut_osm": 9,
+   "worst_cut_ms": 6,
+   "rank": 79,
+   "choke": [
+    -64.742185,
+    46.093641
+   ]
+  },
+  {
+   "nid": 285,
+   "status": "red",
+   "homes": 55,
+   "homes_osm": 55,
+   "homes_ms": 55,
+   "gateways": 1,
+   "worst_cut": 55,
+   "worst_cut_osm": 55,
+   "worst_cut_ms": 55,
+   "rank": 14,
+   "choke": [
+    -64.731701,
+    46.082261
+   ]
+  },
+  {
+   "nid": 286,
+   "status": "amber",
+   "homes": 153,
+   "homes_osm": 142,
+   "homes_ms": 153,
+   "gateways": 6,
+   "worst_cut": 4,
+   "worst_cut_osm": 4,
+   "worst_cut_ms": 3,
+   "rank": 115,
+   "choke": [
+    -64.725521,
+    46.08815
+   ]
+  },
+  {
+   "nid": 289,
+   "status": "amber",
+   "homes": 95,
+   "homes_osm": 95,
+   "homes_ms": 91,
+   "gateways": 2,
+   "worst_cut": 9,
+   "worst_cut_osm": 7,
+   "worst_cut_ms": 9,
+   "rank": 80,
+   "choke": [
+    -64.732577,
+    46.076986
+   ]
+  },
+  {
+   "nid": 294,
+   "status": "amber",
+   "homes": 121,
+   "homes_osm": 121,
+   "homes_ms": 115,
+   "gateways": 2,
+   "worst_cut": 22,
+   "worst_cut_osm": 22,
+   "worst_cut_ms": 18,
+   "rank": 49,
+   "choke": [
+    -64.721847,
+    46.0976
+   ]
+  },
+  {
+   "nid": 299,
+   "status": "amber",
+   "homes": 123,
+   "homes_osm": 123,
+   "homes_ms": 117,
+   "gateways": 3,
+   "worst_cut": 7,
+   "worst_cut_osm": 6,
+   "worst_cut_ms": 7,
+   "rank": 97,
+   "choke": [
+    -64.710952,
+    46.100702
+   ]
+  },
+  {
+   "nid": 302,
+   "status": "red",
+   "homes": 81,
+   "homes_osm": 81,
+   "homes_ms": 80,
+   "gateways": 1,
+   "worst_cut": 80,
+   "worst_cut_osm": 80,
+   "worst_cut_ms": 79,
+   "rank": 8,
+   "choke": [
+    -64.715442,
+    46.119041
+   ]
+  },
+  {
+   "nid": 306,
+   "status": "red",
+   "homes": 38,
+   "homes_osm": 38,
+   "homes_ms": 37,
+   "gateways": 1,
+   "worst_cut": 37,
+   "worst_cut_osm": 37,
+   "worst_cut_ms": 36,
+   "rank": 27,
+   "choke": [
+    -64.723694,
+    46.096996
+   ]
+  },
+  {
+   "nid": 312,
+   "status": "amber",
+   "homes": 53,
+   "homes_osm": 53,
+   "homes_ms": 53,
+   "gateways": 2,
+   "worst_cut": 25,
+   "worst_cut_osm": 25,
+   "worst_cut_ms": 24,
+   "rank": 40,
+   "choke": [
+    -64.712603,
+    46.088836
+   ]
+  },
+  {
+   "nid": 314,
+   "status": "amber",
+   "homes": 99,
+   "homes_osm": 99,
+   "homes_ms": 70,
+   "gateways": 3,
+   "worst_cut": 9,
+   "worst_cut_osm": 9,
+   "worst_cut_ms": 6,
+   "rank": 81,
+   "choke": [
+    -64.729924,
+    46.094802
+   ]
+  },
+  {
+   "nid": 315,
+   "status": "amber",
+   "homes": 51,
+   "homes_osm": 51,
+   "homes_ms": 51,
+   "gateways": 3,
+   "worst_cut": 23,
+   "worst_cut_osm": 22,
+   "worst_cut_ms": 23,
+   "rank": 45,
+   "choke": [
+    -64.699864,
+    46.082135
+   ]
+  },
+  {
+   "nid": 358,
+   "status": "amber",
+   "homes": 33,
+   "homes_osm": 33,
+   "homes_ms": 30,
+   "gateways": 2,
+   "worst_cut": 3,
+   "worst_cut_osm": 3,
+   "worst_cut_ms": 2,
+   "rank": 122,
+   "choke": [
+    -64.868824,
+    46.117721
+   ]
+  },
+  {
+   "nid": 361,
+   "status": "red",
+   "homes": 43,
+   "homes_osm": 43,
+   "homes_ms": 33,
+   "gateways": 2,
+   "worst_cut": 40,
+   "worst_cut_osm": 40,
+   "worst_cut_ms": 30,
+   "rank": 24,
+   "choke": [
+    -64.822883,
+    46.096082
+   ]
+  },
+  {
+   "nid": 364,
+   "status": "amber",
+   "homes": 30,
+   "homes_osm": 30,
+   "homes_ms": 28,
+   "gateways": 2,
+   "worst_cut": 2,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 2,
+   "rank": 123,
+   "choke": [
+    -64.805758,
+    46.100859
+   ]
+  },
+  {
+   "nid": 395,
+   "status": "amber",
+   "homes": 40,
+   "homes_osm": 35,
+   "homes_ms": 40,
+   "gateways": 2,
+   "worst_cut": 4,
+   "worst_cut_osm": 4,
+   "worst_cut_ms": 1,
+   "rank": 116,
+   "choke": [
+    -64.801604,
+    46.046283
+   ]
+  },
+  {
+   "nid": 404,
+   "status": "amber",
+   "homes": 51,
+   "homes_osm": 51,
+   "homes_ms": 49,
+   "gateways": 2,
+   "worst_cut": 6,
+   "worst_cut_osm": 5,
+   "worst_cut_ms": 6,
+   "rank": 104,
+   "choke": [
+    -64.702487,
+    46.086018
+   ]
+  }
+ ]
+}

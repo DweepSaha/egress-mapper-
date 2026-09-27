@@ -1,0 +1,128 @@
+{
+ "area": "montague",
+ "bbox": [
+  -62.71886,
+  46.12608,
+  -62.58914,
+  46.21592
+ ],
+ "box_km2": 100.1,
+ "assessable_km2": 36.1,
+ "buildings_osm": 1186,
+ "buildings_ms": 1681,
+ "road_segments": 418,
+ "counts": {
+  "amber": 5,
+  "red": 1
+ },
+ "n_neighbourhoods": 6,
+ "runtime_load_s": 0.3,
+ "runtime_total_s": 0.7,
+ "peak_mb": 173,
+ "params": {
+  "block_radius_m": 50.0,
+  "sweep_spacing_m": 50.0,
+  "min_homes": 30,
+  "min_footprint_m2": 40.0,
+  "max_assign_m": 150.0,
+  "boundary_buffer_m": 2000
+ },
+ "neighbourhoods": [
+  {
+   "nid": 18,
+   "status": "amber",
+   "homes": 86,
+   "homes_osm": 86,
+   "homes_ms": 74,
+   "gateways": 4,
+   "worst_cut": 20,
+   "worst_cut_osm": 19,
+   "worst_cut_ms": 20,
+   "rank": 3,
+   "choke": [
+    -62.642217,
+    46.160274
+   ]
+  },
+  {
+   "nid": 22,
+   "status": "red",
+   "homes": 31,
+   "homes_osm": 31,
+   "homes_ms": 14,
+   "gateways": 1,
+   "worst_cut": 31,
+   "worst_cut_osm": 31,
+   "worst_cut_ms": 13,
+   "rank": 1,
+   "choke": [
+    -62.631847,
+    46.16105
+   ]
+  },
+  {
+   "nid": 32,
+   "status": "amber",
+   "homes": 155,
+   "homes_osm": 155,
+   "homes_ms": 125,
+   "gateways": 11,
+   "worst_cut": 14,
+   "worst_cut_osm": 14,
+   "worst_cut_ms": 6,
+   "rank": 5,
+   "choke": [
+    -62.652645,
+    46.164731
+   ]
+  },
+  {
+   "nid": 33,
+   "status": "amber",
+   "homes": 42,
+   "homes_osm": 42,
+   "homes_ms": 24,
+   "gateways": 4,
+   "worst_cut": 6,
+   "worst_cut_osm": 6,
+   "worst_cut_ms": 2,
+   "rank": 6,
+   "choke": [
+    -62.643654,
+    46.163827
+   ]
+  },
+  {
+   "nid": 34,
+   "status": "amber",
+   "homes": 174,
+   "homes_osm": 174,
+   "homes_ms": 124,
+   "gateways": 7,
+   "worst_cut": 22,
+   "worst_cut_osm": 22,
+   "worst_cut_ms": 8,
+   "rank": 2,
+   "choke": [
+    -62.644708,
+    46.167237
+   ]
+  },
+  {
+   "nid": 37,
+   "status": "amber",
+   "homes": 94,
+   "homes_osm": 94,
+   "homes_ms": 61,
+   "gateways": 3,
+   "worst_cut": 20,
+   "worst_cut_osm": 20,
+   "worst_cut_ms": 16,
+   "rank": 4,
+   "choke": [
+    -62.656603,
+    46.170916
+   ]
+  }
+ ]
+}

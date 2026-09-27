@@ -1,0 +1,618 @@
+{
+ "area": "bathurst",
+ "bbox": [
+  -65.73395,
+  47.5561,
+  -65.57405,
+  47.6639
+ ],
+ "box_km2": 144.1,
+ "assessable_km2": 64.1,
+ "buildings_osm": 3994,
+ "buildings_ms": 5647,
+ "road_segments": 818,
+ "counts": {
+  "red": 8,
+  "amber": 18,
+  "not_assessed": 13
+ },
+ "n_neighbourhoods": 39,
+ "runtime_load_s": 0.5,
+ "runtime_total_s": 1.5,
+ "peak_mb": 186,
+ "params": {
+  "block_radius_m": 50.0,
+  "sweep_spacing_m": 50.0,
+  "min_homes": 30,
+  "min_footprint_m2": 40.0,
+  "max_assign_m": 150.0,
+  "boundary_buffer_m": 2000
+ },
+ "neighbourhoods": [
+  {
+   "nid": 0,
+   "status": "red",
+   "homes": 533,
+   "homes_osm": 533,
+   "homes_ms": 443,
+   "gateways": 6,
+   "worst_cut": 43,
+   "worst_cut_osm": 43,
+   "worst_cut_ms": 36,
+   "rank": 5,
+   "choke": [
+    -65.688136,
+    47.636973
+   ]
+  },
+  {
+   "nid": 4,
+   "status": "amber",
+   "homes": 78,
+   "homes_osm": 78,
+   "homes_ms": 69,
+   "gateways": 2,
+   "worst_cut": 15,
+   "worst_cut_osm": 15,
+   "worst_cut_ms": 13,
+   "rank": 13,
+   "choke": [
+    -65.672323,
+    47.636515
+   ]
+  },
+  {
+   "nid": 7,
+   "status": "amber",
+   "homes": 82,
+   "homes_osm": 82,
+   "homes_ms": 68,
+   "gateways": 4,
+   "worst_cut": 12,
+   "worst_cut_osm": 12,
+   "worst_cut_ms": 7,
+   "rank": 17,
+   "choke": [
+    -65.651193,
+    47.610933
+   ]
+  },
+  {
+   "nid": 13,
+   "status": "amber",
+   "homes": 57,
+   "homes_osm": 57,
+   "homes_ms": 53,
+   "gateways": 5,
+   "worst_cut": 16,
+   "worst_cut_osm": 15,
+   "worst_cut_ms": 16,
+   "rank": 11,
+   "choke": [
+    -65.656407,
+    47.617901
+   ]
+  },
+  {
+   "nid": 15,
+   "status": "amber",
+   "homes": 160,
+   "homes_osm": 160,
+   "homes_ms": 136,
+   "gateways": 3,
+   "worst_cut": 13,
+   "worst_cut_osm": 13,
+   "worst_cut_ms": 10,
+   "rank": 16,
+   "choke": [
+    -65.679986,
+    47.641727
+   ]
+  },
+  {
+   "nid": 17,
+   "status": "amber",
+   "homes": 60,
+   "homes_osm": 60,
+   "homes_ms": 52,
+   "gateways": 3,
+   "worst_cut": 5,
+   "worst_cut_osm": 5,
+   "worst_cut_ms": 4,
+   "rank": 21,
+   "choke": [
+    -65.665752,
+    47.627388
+   ]
+  },
+  {
+   "nid": 18,
+   "status": "red",
+   "homes": 260,
+   "homes_osm": 260,
+   "homes_ms": 233,
+   "gateways": 6,
+   "worst_cut": 49,
+   "worst_cut_osm": 49,
+   "worst_cut_ms": 44,
+   "rank": 3,
+   "choke": [
+    -65.691315,
+    47.642509
+   ]
+  },
+  {
+   "nid": 19,
+   "status": "red",
+   "homes": 65,
+   "homes_osm": 1,
+   "homes_ms": 65,
+   "gateways": 1,
+   "worst_cut": 64,
+   "worst_cut_osm": 1,
+   "worst_cut_ms": 64,
+   "rank": 2,
+   "choke": [
+    -65.655238,
+    47.604299
+   ]
+  },
+  {
+   "nid": 21,
+   "status": "red",
+   "homes": 48,
+   "homes_osm": 48,
+   "homes_ms": 40,
+   "gateways": 1,
+   "worst_cut": 47,
+   "worst_cut_osm": 47,
+   "worst_cut_ms": 39,
+   "rank": 4,
+   "choke": [
+    -65.687283,
+    47.642055
+   ]
+  },
+  {
+   "nid": 23,
+   "status": "amber",
+   "homes": 57,
+   "homes_osm": 57,
+   "homes_ms": 48,
+   "gateways": 4,
+   "worst_cut": 7,
+   "worst_cut_osm": 7,
+   "worst_cut_ms": 7,
+   "rank": 19,
+   "choke": [
+    -65.651658,
+    47.615602
+   ]
+  },
+  {
+   "nid": 24,
+   "status": "not_assessed",
+   "homes": 62,
+   "homes_osm": 62,
+   "homes_ms": 50,
+   "gateways": 1,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 26,
+   "status": "amber",
+   "homes": 105,
+   "homes_osm": 105,
+   "homes_ms": 92,
+   "gateways": 3,
+   "worst_cut": 18,
+   "worst_cut_osm": 18,
+   "worst_cut_ms": 17,
+   "rank": 10,
+   "choke": [
+    -65.671987,
+    47.624825
+   ]
+  },
+  {
+   "nid": 27,
+   "status": "amber",
+   "homes": 95,
+   "homes_osm": 95,
+   "homes_ms": 85,
+   "gateways": 3,
+   "worst_cut": 14,
+   "worst_cut_osm": 14,
+   "worst_cut_ms": 14,
+   "rank": 15,
+   "choke": [
+    -65.681054,
+    47.624311
+   ]
+  },
+  {
+   "nid": 31,
+   "status": "amber",
+   "homes": 84,
+   "homes_osm": 0,
+   "homes_ms": 84,
+   "gateways": 3,
+   "worst_cut": 9,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 9,
+   "rank": 18,
+   "choke": [
+    -65.667266,
+    47.616202
+   ]
+  },
+  {
+   "nid": 37,
+   "status": "not_assessed",
+   "homes": 69,
+   "homes_osm": 6,
+   "homes_ms": 69,
+   "gateways": 1,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 38,
+   "status": "red",
+   "homes": 78,
+   "homes_osm": 42,
+   "homes_ms": 78,
+   "gateways": 1,
+   "worst_cut": 78,
+   "worst_cut_osm": 42,
+   "worst_cut_ms": 78,
+   "rank": 1,
+   "choke": [
+    -65.670014,
+    47.6085
+   ]
+  },
+  {
+   "nid": 42,
+   "status": "not_assessed",
+   "homes": 63,
+   "homes_osm": 63,
+   "homes_ms": 41,
+   "gateways": 1,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 44,
+   "status": "not_assessed",
+   "homes": 37,
+   "homes_osm": 37,
+   "homes_ms": 32,
+   "gateways": 2,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 48,
+   "status": "not_assessed",
+   "homes": 60,
+   "homes_osm": 60,
+   "homes_ms": 52,
+   "gateways": 1,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 60,
+   "status": "red",
+   "homes": 30,
+   "homes_osm": 0,
+   "homes_ms": 30,
+   "gateways": 1,
+   "worst_cut": 30,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 30,
+   "rank": 7,
+   "choke": [
+    -65.652213,
+    47.606945
+   ]
+  },
+  {
+   "nid": 61,
+   "status": "red",
+   "homes": 32,
+   "homes_osm": 0,
+   "homes_ms": 32,
+   "gateways": 1,
+   "worst_cut": 30,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 30,
+   "rank": 8,
+   "choke": [
+    -65.6509,
+    47.608185
+   ]
+  },
+  {
+   "nid": 65,
+   "status": "red",
+   "homes": 34,
+   "homes_osm": 8,
+   "homes_ms": 34,
+   "gateways": 1,
+   "worst_cut": 32,
+   "worst_cut_osm": 8,
+   "worst_cut_ms": 32,
+   "rank": 6,
+   "choke": [
+    -65.651492,
+    47.607639
+   ]
+  },
+  {
+   "nid": 67,
+   "status": "not_assessed",
+   "homes": 544,
+   "homes_osm": 103,
+   "homes_ms": 544,
+   "gateways": 2,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 68,
+   "status": "not_assessed",
+   "homes": 34,
+   "homes_osm": 1,
+   "homes_ms": 34,
+   "gateways": 2,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 73,
+   "status": "not_assessed",
+   "homes": 208,
+   "homes_osm": 9,
+   "homes_ms": 208,
+   "gateways": 4,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 74,
+   "status": "amber",
+   "homes": 51,
+   "homes_osm": 51,
+   "homes_ms": 46,
+   "gateways": 2,
+   "worst_cut": 5,
+   "worst_cut_osm": 4,
+   "worst_cut_ms": 5,
+   "rank": 22,
+   "choke": [
+    -65.626214,
+    47.60416
+   ]
+  },
+  {
+   "nid": 75,
+   "status": "amber",
+   "homes": 109,
+   "homes_osm": 2,
+   "homes_ms": 109,
+   "gateways": 2,
+   "worst_cut": 4,
+   "worst_cut_osm": 1,
+   "worst_cut_ms": 4,
+   "rank": 25,
+   "choke": [
+    -65.621841,
+    47.605441
+   ]
+  },
+  {
+   "nid": 77,
+   "status": "amber",
+   "homes": 61,
+   "homes_osm": 8,
+   "homes_ms": 61,
+   "gateways": 2,
+   "worst_cut": 6,
+   "worst_cut_osm": 2,
+   "worst_cut_ms": 6,
+   "rank": 20,
+   "choke": [
+    -65.624088,
+    47.621732
+   ]
+  },
+  {
+   "nid": 78,
+   "status": "amber",
+   "homes": 57,
+   "homes_osm": 0,
+   "homes_ms": 57,
+   "gateways": 2,
+   "worst_cut": 16,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 16,
+   "rank": 12,
+   "choke": [
+    -65.613153,
+    47.623862
+   ]
+  },
+  {
+   "nid": 83,
+   "status": "amber",
+   "homes": 41,
+   "homes_osm": 1,
+   "homes_ms": 41,
+   "gateways": 2,
+   "worst_cut": 15,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 15,
+   "rank": 14,
+   "choke": [
+    -65.669122,
+    47.579071
+   ]
+  },
+  {
+   "nid": 87,
+   "status": "not_assessed",
+   "homes": 120,
+   "homes_osm": 10,
+   "homes_ms": 120,
+   "gateways": 2,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 91,
+   "status": "not_assessed",
+   "homes": 37,
+   "homes_osm": 37,
+   "homes_ms": 28,
+   "gateways": 1,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 93,
+   "status": "not_assessed",
+   "homes": 117,
+   "homes_osm": 117,
+   "homes_ms": 1,
+   "gateways": 3,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 94,
+   "status": "not_assessed",
+   "homes": 43,
+   "homes_osm": 43,
+   "homes_ms": 38,
+   "gateways": 1,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 95,
+   "status": "not_assessed",
+   "homes": 32,
+   "homes_osm": 32,
+   "homes_ms": 24,
+   "gateways": 1,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 98,
+   "status": "amber",
+   "homes": 33,
+   "homes_osm": 33,
+   "homes_ms": 29,
+   "gateways": 2,
+   "worst_cut": 22,
+   "worst_cut_osm": 22,
+   "worst_cut_ms": 19,
+   "rank": 9,
+   "choke": [
+    -65.669134,
+    47.633581
+   ]
+  },
+  {
+   "nid": 115,
+   "status": "amber",
+   "homes": 31,
+   "homes_osm": 31,
+   "homes_ms": 25,
+   "gateways": 2,
+   "worst_cut": 4,
+   "worst_cut_osm": 4,
+   "worst_cut_ms": 2,
+   "rank": 26,
+   "choke": [
+    -65.677517,
+    47.631676
+   ]
+  },
+  {
+   "nid": 116,
+   "status": "amber",
+   "homes": 37,
+   "homes_osm": 37,
+   "homes_ms": 26,
+   "gateways": 2,
+   "worst_cut": 5,
+   "worst_cut_osm": 5,
+   "worst_cut_ms": 4,
+   "rank": 23,
+   "choke": [
+    -65.674616,
+    47.632725
+   ]
+  },
+  {
+   "nid": 117,
+   "status": "amber",
+   "homes": 38,
+   "homes_osm": 38,
+   "homes_ms": 30,
+   "gateways": 2,
+   "worst_cut": 5,
+   "worst_cut_osm": 5,
+   "worst_cut_ms": 5,
+   "rank": 24,
+   "choke": [
+    -65.683597,
+    47.638493
+   ]
+  }
+ ]
+}

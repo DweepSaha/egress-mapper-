@@ -1,0 +1,112 @@
+00:49:29 === Maritimes batch start: 13 areas (NS + PEI) + Tantallon reference scan; free RAM 1827 MB ===
+00:49:29 [tantallon] existing validation area: scan only (reference; excluded from totals, HRM covers it)
+00:49:46   scan: rc=0 in 17s :: tantallon: 23979 OSM / 18985 MS; 86 nbs {'red': 26, 'not_assessed': 58, 'amber': 2}; 15s; peak 244 MB
+00:49:46 [hrm] start; box (-63.97, 44.58, -63.42, 44.86)
+00:49:46   low RAM before extract hrm: 1765 MB free (< 1800); waiting
+00:52:07   extract: rc=0 in 111s :: [hrm] drivable subset: 12,110 ways, 112,590 nodes; estimated XML 31 MB | [hrm] wrote hrm-drive.osm: 20.7 MB  (111s, peak 319 MB)
+00:52:24   graph: rc=0 in 17s :: [hrm] weakly connected components: 29; largest 9,879 nodes (99.4%); next: [4, 4, 4, 2, 2, 2, 2] | [PASS] [hrm] GraphML hrm.graphml (16.1 MB) reloaded: 9,941 nodes, 23,905 edges
+00:52:27   buildings: rc=0 in 3s :: [PASS] [hrm] buildings: 121,069 footprints -> hrm.gpkg (33.7 MB, reread 121,069), peak 235 MB
+00:52:33   msclip: rc=0 in 6s :: NovaScotia.zip: streamed 402,358 footprints |   [PASS] hrm: 100,962 footprints -> data\buildings\microsoft\hrm.gpkg (21.4 MB)
+00:54:16   scan: rc=0 in 103s :: hrm: 111206 OSM / 94058 MS; 398 nbs {'amber': 154, 'red': 220, 'not_assessed': 24}; 101s; peak 536 MB
+00:54:16 [hrm] DONE in 270s
+00:54:16 [cbrm] start; box (-60.23569, 46.0722, -59.92431, 46.2878)
+00:54:16   low RAM before extract cbrm: 1603 MB free (< 1800); waiting
+00:56:17   extract: rc=0 in 91s :: [cbrm] drivable subset: 3,737 ways, 27,103 nodes; estimated XML 7 MB | [cbrm] wrote cbrm-drive.osm: 4.8 MB  (91s, peak 168 MB)
+00:56:17   low RAM before graph cbrm: 1699 MB free (< 1800); waiting
+00:56:53   graph: rc=0 in 6s :: [cbrm] weakly connected components: 9; largest 2,848 nodes (92.6%); next: [203, 8, 5, 2, 2, 2, 2] | [PASS] [cbrm] GraphML cbrm.graphml (4.7 MB) reloaded: 3,074 nodes, 7,854 edges
+00:56:55   buildings: rc=0 in 2s :: [PASS] [cbrm] buildings: 30,066 footprints -> cbrm.gpkg (7.7 MB, reread 30,066), peak 141 MB
+00:56:59   msclip: rc=0 in 3s :: NovaScotia.zip: streamed 402,358 footprints |   [PASS] cbrm: 27,623 footprints -> data\buildings\microsoft\cbrm.gpkg (5.8 MB)
+00:57:20   scan: rc=0 in 21s :: cbrm: 29352 OSM / 24977 MS; 124 nbs {'not_assessed': 21, 'red': 40, 'amber': 63}; 19s; peak 272 MB
+00:57:20 [cbrm] DONE in 184s
+00:57:20 [truro] start; box (-63.36372, 45.3121, -63.21028, 45.4199)
+00:57:20   low RAM before extract truro: 841 MB free (< 1800); waiting
+00:59:20   low RAM before extract truro: 1097 MB free (< 1800); waiting
+01:02:05   extract: rc=0 in 105s :: [truro] drivable subset: 1,097 ways, 5,751 nodes; estimated XML 2 MB | [truro] wrote truro-drive.osm: 1.2 MB  (105s, peak 146 MB)
+01:02:05   low RAM before graph truro: 774 MB free (< 1800); waiting
+01:04:05   low RAM before graph truro: 1679 MB free (< 1800); waiting
+01:05:40   graph: rc=0 in 5s :: [truro] weakly connected components: 19; largest 1,161 nodes (96.8%); next: [4, 2, 2, 2, 2, 2, 2] | [PASS] [truro] GraphML truro.graphml (1.5 MB) reloaded: 1,199 nodes, 2,812 edges
+01:05:42   buildings: rc=0 in 2s :: [PASS] [truro] buildings: 9,197 footprints -> truro.gpkg (2.5 MB, reread 9,197), peak 120 MB
+01:05:45   msclip: rc=0 in 3s :: NovaScotia.zip: streamed 402,358 footprints |   [PASS] truro: 10,414 footprints -> data\buildings\microsoft\truro.gpkg (2.3 MB)
+01:05:52   scan: rc=0 in 7s :: truro: 9017 OSM / 9686 MS; 62 nbs {'red': 22, 'amber': 23, 'not_assessed': 17}; 5s; peak 202 MB
+01:05:52 [truro] DONE in 512s
+01:05:52 [new_glasgow] start; box (-62.727, 45.5211, -62.573, 45.6289)
+01:07:30   extract: rc=0 in 97s :: [new_glasgow] drivable subset: 1,381 ways, 8,615 nodes; estimated XML 2 MB | [new_glasgow] wrote new_glasgow-drive.osm: 1.6 MB  (97s, peak 146 MB)
+01:07:33   graph: rc=0 in 3s :: [new_glasgow] weakly connected components: 2; largest 1,300 nodes (99.8%); next: [2] | [PASS] [new_glasgow] GraphML new_glasgow.graphml (1.8 MB) reloaded: 1,302 nodes, 3,362 edges
+01:07:34   buildings: rc=0 in 1s :: [PASS] [new_glasgow] buildings: 11,658 footprints -> new_glasgow.gpkg (3.1 MB, reread 11,658), peak 122 MB
+01:07:37   msclip: rc=0 in 3s :: NovaScotia.zip: streamed 402,358 footprints |   [PASS] new_glasgow: 8,690 footprints -> data\buildings\microsoft\new_glasgow.gpkg (1.9 MB)
+01:07:46   scan: rc=0 in 9s :: new_glasgow: 11282 OSM / 8181 MS; 45 nbs {'amber': 16, 'red': 10, 'not_assessed': 19}; 7s; peak 206 MB
+01:07:46 [new_glasgow] DONE in 114s
+01:07:46 [kentville] start; box (-64.52906, 45.02212, -64.35094, 45.14788)
+01:09:21   extract: rc=0 in 95s :: [kentville] drivable subset: 1,256 ways, 19,518 nodes; estimated XML 5 MB | [kentville] wrote kentville-drive.osm: 3.1 MB  (94s, peak 157 MB)
+01:09:21   low RAM before graph kentville: 1731 MB free (< 1800); waiting
+01:09:54   graph: rc=0 in 3s :: [kentville] weakly connected components: 3; largest 1,036 nodes (99.4%); next: [4, 2] | [PASS] [kentville] GraphML kentville.graphml (2.1 MB) reloaded: 1,042 nodes, 2,540 edges
+01:09:56   buildings: rc=0 in 1s :: [PASS] [kentville] buildings: 5,483 footprints -> kentville.gpkg (1.6 MB, reread 5,483), peak 115 MB
+01:09:59   msclip: rc=0 in 3s :: NovaScotia.zip: streamed 402,358 footprints |   [PASS] kentville: 9,038 footprints -> data\buildings\microsoft\kentville.gpkg (2.0 MB)
+01:10:04   scan: rc=0 in 6s :: kentville: 5316 OSM / 8703 MS; 42 nbs {'not_assessed': 16, 'red': 13, 'amber': 13}; 4s; peak 198 MB
+01:10:04 [kentville] DONE in 138s
+01:10:04 [amherst] start; box (-64.26846, 45.78408, -64.13954, 45.87392)
+01:10:04   low RAM before extract amherst: 1749 MB free (< 1800); waiting
+01:12:13   extract: rc=0 in 99s :: [amherst] drivable subset: 806 ways, 4,207 nodes; estimated XML 1 MB | [amherst] wrote amherst-drive.osm: 0.8 MB  (98s, peak 139 MB)
+01:12:15   graph: rc=0 in 3s :: [amherst] weakly connected components: 2; largest 549 nodes (99.6%); next: [2] | [PASS] [amherst] GraphML amherst.graphml (0.8 MB) reloaded: 551 nodes, 1,451 edges
+01:12:17   buildings: rc=0 in 1s :: [PASS] [amherst] buildings: 5,358 footprints -> amherst.gpkg (1.5 MB, reread 5,358), peak 115 MB
+01:12:20   msclip: rc=0 in 3s :: NovaScotia.zip: streamed 402,358 footprints |   [PASS] amherst: 4,280 footprints -> data\buildings\microsoft\amherst.gpkg (1.0 MB)
+01:12:25   scan: rc=0 in 5s :: amherst: 4868 OSM / 3972 MS; 25 nbs {'not_assessed': 3, 'red': 9, 'amber': 13}; 3s; peak 184 MB
+01:12:25 [amherst] DONE in 140s
+01:12:25 [bridgewater] start; box (-64.58184, 44.33208, -64.45616, 44.42192)
+01:13:53   extract: rc=0 in 88s :: [bridgewater] drivable subset: 616 ways, 13,123 nodes; estimated XML 3 MB | [bridgewater] wrote bridgewater-drive.osm: 2.0 MB  (88s, peak 145 MB)
+01:13:56   graph: rc=0 in 3s :: [bridgewater] weakly connected components: 1; largest 668 nodes (100.0%); next: [] | [PASS] [bridgewater] GraphML bridgewater.graphml (1.4 MB) reloaded: 668 nodes, 1,643 edges
+01:13:57   buildings: rc=0 in 1s :: [PASS] [bridgewater] buildings: 4,928 footprints -> bridgewater.gpkg (1.5 MB, reread 4,928), peak 115 MB
+01:14:00   msclip: rc=0 in 3s :: NovaScotia.zip: streamed 402,358 footprints |   [PASS] bridgewater: 4,377 footprints -> data\buildings\microsoft\bridgewater.gpkg (1.0 MB)
+01:14:05   scan: rc=0 in 5s :: bridgewater: 4647 OSM / 4200 MS; 26 nbs {'red': 11, 'not_assessed': 8, 'amber': 7}; 2s; peak 186 MB
+01:14:05 [bridgewater] DONE in 100s
+01:14:05 [yarmouth] start; box (-66.17827, 43.79208, -66.05373, 43.88192)
+01:14:05   low RAM before extract yarmouth: 1473 MB free (< 1800); waiting
+01:15:35   extract: rc=0 in 60s :: [yarmouth] drivable subset: 757 ways, 6,317 nodes; estimated XML 2 MB | [yarmouth] wrote yarmouth-drive.osm: 1.1 MB  (60s, peak 139 MB)
+01:15:38   graph: rc=0 in 3s :: [yarmouth] weakly connected components: 2; largest 556 nodes (99.6%); next: [2] | [PASS] [yarmouth] GraphML yarmouth.graphml (0.9 MB) reloaded: 558 nodes, 1,476 edges
+01:15:39   buildings: rc=0 in 1s :: [PASS] [yarmouth] buildings: 3,003 footprints -> yarmouth.gpkg (0.9 MB, reread 3,003), peak 112 MB
+01:15:42   msclip: rc=0 in 3s :: NovaScotia.zip: streamed 402,358 footprints |   [PASS] yarmouth: 4,748 footprints -> data\buildings\microsoft\yarmouth.gpkg (1.1 MB)
+01:15:48   scan: rc=0 in 6s :: yarmouth: 2905 OSM / 4185 MS; 14 nbs {'not_assessed': 6, 'red': 1, 'amber': 7}; 3s; peak 183 MB
+01:15:48 [yarmouth] DONE in 103s
+01:15:48 [antigonish] start; box (-62.05522, 45.57608, -61.92678, 45.66592)
+01:15:48   low RAM before extract antigonish: 1642 MB free (< 1800); waiting
+01:17:48   low RAM before extract antigonish: 1790 MB free (< 1800); waiting
+01:19:48   low RAM before extract antigonish: 1587 MB free (< 1800); waiting
+01:21:48   low RAM before extract antigonish: 1667 MB free (< 1800); waiting
+01:23:48   low RAM before extract antigonish: 1137 MB free (< 1800); waiting
+01:25:30   extract: rc=0 in 73s :: [antigonish] drivable subset: 591 ways, 3,954 nodes; estimated XML 1 MB | [antigonish] wrote antigonish-drive.osm: 0.7 MB  (72s, peak 142 MB)
+01:25:30   low RAM before graph antigonish: 1782 MB free (< 1800); waiting
+01:26:04   graph: rc=0 in 3s :: [antigonish] weakly connected components: 3; largest 504 nodes (99.2%); next: [2, 2] | [PASS] [antigonish] GraphML antigonish.graphml (0.7 MB) reloaded: 508 nodes, 1,113 edges
+01:26:04   low RAM before buildings antigonish: 1784 MB free (< 1800); waiting
+01:26:36   buildings: rc=0 in 2s :: [PASS] [antigonish] buildings: 3,800 footprints -> antigonish.gpkg (1.1 MB, reread 3,800), peak 113 MB
+01:26:39   msclip: rc=0 in 3s :: NovaScotia.zip: streamed 402,358 footprints |   [PASS] antigonish: 3,106 footprints -> data\buildings\microsoft\antigonish.gpkg (0.8 MB)
+01:26:43   scan: rc=0 in 4s :: antigonish: 3776 OSM / 2995 MS; 21 nbs {'not_assessed': 8, 'red': 10, 'amber': 3}; 2s; peak 179 MB
+01:26:43 [antigonish] DONE in 655s
+01:26:43 [chester] start; box (-64.30402, 44.49608, -64.17798, 44.58592)
+01:28:11   extract: rc=0 in 88s :: [chester] drivable subset: 318 ways, 9,439 nodes; estimated XML 2 MB | [chester] wrote chester-drive.osm: 1.4 MB  (88s, peak 140 MB)
+01:28:14   graph: rc=0 in 3s :: [chester] weakly connected components: 9; largest 305 nodes (91.6%); next: [10, 4, 4, 2, 2, 2, 2] | [PASS] [chester] GraphML chester.graphml (0.8 MB) reloaded: 333 nodes, 775 edges
+01:28:15   buildings: rc=0 in 1s :: [PASS] [chester] buildings: 1,113 footprints -> chester.gpkg (0.4 MB, reread 1,113), peak 110 MB
+01:28:18   msclip: rc=0 in 3s :: NovaScotia.zip: streamed 402,358 footprints |   [PASS] chester: 2,093 footprints -> data\buildings\microsoft\chester.gpkg (0.5 MB)
+01:28:23   scan: rc=0 in 5s :: chester: 1075 OSM / 1878 MS; 11 nbs {'not_assessed': 5, 'red': 4, 'amber': 2}; 2s; peak 175 MB
+01:28:23 [chester] DONE in 100s
+01:28:23 [charlottetown] start; box (-63.22091, 46.17212, -63.03909, 46.29788)
+01:28:40   extract: rc=0 in 17s :: [charlottetown] drivable subset: 2,367 ways, 19,266 nodes; estimated XML 5 MB | [charlottetown] wrote charlottetown-drive.osm: 3.4 MB  (17s, peak 107 MB)
+01:28:44   graph: rc=0 in 4s :: [charlottetown] weakly connected components: 8; largest 2,362 nodes (94.7%); next: [113, 9, 2, 2, 2, 2, 2] | [PASS] [charlottetown] GraphML charlottetown.graphml (3.5 MB) reloaded: 2,494 nodes, 6,241 edges
+01:28:46   buildings: rc=0 in 2s :: [PASS] [charlottetown] buildings: 21,140 footprints -> charlottetown.gpkg (6.0 MB, reread 21,140), peak 133 MB
+01:28:48   msclip: rc=0 in 2s :: PrinceEdwardIsland.zip: streamed 76,590 footprints |   [PASS] charlottetown: 15,670 footprints -> data\buildings\microsoft\charlottetown.gpkg (3.4 MB)
+01:29:05   scan: rc=0 in 18s :: charlottetown: 20412 OSM / 15020 MS; 95 nbs {'amber': 50, 'not_assessed': 29, 'red': 16}; 16s; peak 240 MB
+01:29:05 [charlottetown] DONE in 43s
+01:29:05 [summerside] start; box (-63.85412, 46.34908, -63.72388, 46.43892)
+01:29:14   extract: rc=0 in 9s :: [summerside] drivable subset: 931 ways, 5,572 nodes; estimated XML 2 MB | [summerside] wrote summerside-drive.osm: 1.1 MB  (9s, peak 92 MB)
+01:29:17   graph: rc=0 in 3s :: [summerside] weakly connected components: 5; largest 845 nodes (96.6%); next: [18, 8, 2, 2] | [PASS] [summerside] GraphML summerside.graphml (1.3 MB) reloaded: 875 nodes, 2,307 edges
+01:29:18   buildings: rc=0 in 1s :: [PASS] [summerside] buildings: 8,528 footprints -> summerside.gpkg (2.4 MB, reread 8,528), peak 119 MB
+01:29:20   msclip: rc=0 in 2s :: PrinceEdwardIsland.zip: streamed 76,590 footprints |   [PASS] summerside: 6,636 footprints -> data\buildings\microsoft\summerside.gpkg (1.5 MB)
+01:29:25   scan: rc=0 in 5s :: summerside: 8153 OSM / 6125 MS; 36 nbs {'red': 12, 'amber': 13, 'not_assessed': 11}; 3s; peak 194 MB
+01:29:25 [summerside] DONE in 20s
+01:29:25 [montague] start; box (-62.71886, 46.12608, -62.58914, 46.21592)
+01:29:33   extract: rc=0 in 8s :: [montague] drivable subset: 355 ways, 2,816 nodes; estimated XML 1 MB | [montague] wrote montague-drive.osm: 0.5 MB  (8s, peak 87 MB)
+01:29:35   graph: rc=0 in 2s :: [montague] weakly connected components: 3; largest 331 nodes (98.8%); next: [2, 2] | [PASS] [montague] GraphML montague.graphml (0.5 MB) reloaded: 335 nodes, 783 edges
+01:29:37   buildings: rc=0 in 1s :: [PASS] [montague] buildings: 1,223 footprints -> montague.gpkg (0.4 MB, reread 1,223), peak 110 MB
+01:29:38   msclip: rc=0 in 2s :: PrinceEdwardIsland.zip: streamed 76,590 footprints |   [PASS] montague: 1,850 footprints -> data\buildings\microsoft\montague.gpkg (0.5 MB)
+01:29:41   scan: rc=0 in 3s :: montague: 1186 OSM / 1681 MS; 6 nbs {'amber': 5, 'red': 1}; 1s; peak 173 MB
+01:29:41 [montague] DONE in 16s
+01:29:41 === Maritimes batch end ===

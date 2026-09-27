@@ -1,0 +1,117 @@
+23:32:30 === NB batch start: 15 new areas + existing fredericton, pointe_sapin; free RAM 3380 MB ===
+23:32:30 [fredericton] existing area: scan only
+23:32:50   scan: rc=0 in 19s :: fredericton: 29088 OSM / 32926 MS; 165 nbs {'amber': 92, 'red': 63, 'not_assessed': 10}; 17s; peak 311 MB
+23:32:50 [pointe_sapin] existing area: scan only
+23:32:52   scan: rc=0 in 2s :: pointe_sapin: 147 OSM / 1540 MS; 2 nbs {'not_assessed': 2}; 0s; peak 168 MB
+23:32:52 [moncton] start; box (-64.89953, 46.00017, -64.64047, 46.17983)
+23:33:36   extract: rc=0 in 44s :: [moncton] drivable subset: 5,071 ways, 22,698 nodes; estimated XML 8 MB | [moncton] wrote moncton-drive.osm: 5.6 MB  (44s, peak 188 MB)
+23:33:41   graph: rc=0 in 5s :: [moncton] weakly connected components: 4; largest 4,610 nodes (99.8%); next: [6, 2, 2] | [PASS] [moncton] GraphML moncton.graphml (6.3 MB) reloaded: 4,620 nodes, 12,258 edges
+23:33:43   buildings: rc=0 in 2s :: [PASS] [moncton] buildings: 41,026 footprints -> moncton.gpkg (13.0 MB, reread 41,026), peak 158 MB
+23:33:47   msclip: rc=0 in 3s :: NewBrunswick.zip: streamed 350,989 footprints |   [PASS] moncton: 40,620 footprints -> data\buildings\microsoft\moncton.gpkg (8.6 MB)
+23:34:10   scan: rc=0 in 24s :: moncton: 39270 OSM / 37952 MS; 133 nbs {'red': 33, 'amber': 90, 'not_assessed': 10}; 22s; peak 327 MB
+23:34:10 [moncton] DONE in 79s
+23:34:10 [saint_john] start; box (-66.1749, 45.19915, -65.9451, 45.36085)
+23:35:17   extract: rc=0 in 67s :: [saint_john] drivable subset: 2,381 ways, 32,409 nodes; estimated XML 8 MB | [saint_john] wrote saint_john-drive.osm: 5.0 MB  (67s, peak 207 MB)
+23:35:23   graph: rc=0 in 5s :: [saint_john] weakly connected components: 3; largest 2,585 nodes (97.9%); next: [35, 20] | [PASS] [saint_john] GraphML saint_john.graphml (4.2 MB) reloaded: 2,640 nodes, 6,435 edges
+23:35:24   buildings: rc=0 in 2s :: [PASS] [saint_john] buildings: 28,405 footprints -> saint_john.gpkg (7.9 MB, reread 28,405), peak 140 MB
+23:35:27   msclip: rc=0 in 3s :: NewBrunswick.zip: streamed 350,989 footprints |   [PASS] saint_john: 21,859 footprints -> data\buildings\microsoft\saint_john.gpkg (4.8 MB)
+23:35:46   scan: rc=0 in 19s :: saint_john: 22203 OSM / 19738 MS; 101 nbs {'amber': 42, 'red': 37, 'not_assessed': 22}; 17s; peak 251 MB
+23:35:46 [saint_john] DONE in 96s
+23:35:46 [quispamsis] start; box (-66.03898, 45.36508, -65.91102, 45.45492)
+23:36:49   extract: rc=0 in 63s :: [quispamsis] drivable subset: 979 ways, 9,081 nodes; estimated XML 2 MB | [quispamsis] wrote quispamsis-drive.osm: 1.4 MB  (63s, peak 148 MB)
+23:36:52   graph: rc=0 in 3s :: [quispamsis] weakly connected components: 2; largest 1,371 nodes (98.8%); next: [16] | [PASS] [quispamsis] GraphML quispamsis.graphml (1.8 MB) reloaded: 1,387 nodes, 3,331 edges
+23:36:53   buildings: rc=0 in 1s :: [PASS] [quispamsis] buildings: 1,534 footprints -> quispamsis.gpkg (0.5 MB, reread 1,534), peak 110 MB
+23:36:56   msclip: rc=0 in 3s :: NewBrunswick.zip: streamed 350,989 footprints |   [PASS] quispamsis: 9,225 footprints -> data\buildings\microsoft\quispamsis.gpkg (2.0 MB)
+23:37:03   scan: rc=0 in 7s :: quispamsis: 1364 OSM / 8894 MS; 39 nbs {'not_assessed': 15, 'red': 12, 'amber': 12}; 4s; peak 199 MB
+23:37:03 [quispamsis] DONE in 77s
+23:37:03 [miramichi] start; box (-65.59222, 46.94712, -65.40778, 47.07288)
+23:38:03   extract: rc=0 in 61s :: [miramichi] drivable subset: 995 ways, 4,562 nodes; estimated XML 1 MB | [miramichi] wrote miramichi-drive.osm: 0.9 MB  (60s, peak 150 MB)
+23:38:06   graph: rc=0 in 3s :: [miramichi] weakly connected components: 3; largest 1,143 nodes (99.7%); next: [2, 2] | [PASS] [miramichi] GraphML miramichi.graphml (1.5 MB) reloaded: 1,147 nodes, 2,888 edges
+23:38:07   buildings: rc=0 in 1s :: [PASS] [miramichi] buildings: 9,159 footprints -> miramichi.gpkg (2.6 MB, reread 9,159), peak 120 MB
+23:38:13   msclip: rc=0 in 5s :: NewBrunswick.zip: streamed 350,989 footprints |   [PASS] miramichi: 7,156 footprints -> data\buildings\microsoft\miramichi.gpkg (1.6 MB)
+23:55:49   scan: rc=0 in 1057s :: miramichi: 8359 OSM / 6812 MS; 44 nbs {'amber': 19, 'red': 12, 'not_assessed': 13}; 5s; peak 200 MB
+23:55:49 [miramichi] DONE in 1127s
+23:55:49 [bathurst] start; box (-65.73395, 47.5561, -65.57405, 47.6639)
+23:55:49   low RAM before extract bathurst: 1193 MB free (< 1500); waiting 30 s
+23:56:19   low RAM before extract bathurst: 1305 MB free (< 1500); waiting 30 s
+23:57:30   extract: rc=0 in 41s :: [bathurst] drivable subset: 572 ways, 4,885 nodes; estimated XML 1 MB | [bathurst] wrote bathurst-drive.osm: 0.8 MB  (40s, peak 151 MB)
+23:57:33   graph: rc=0 in 3s :: [bathurst] weakly connected components: 2; largest 639 nodes (99.7%); next: [2] | [PASS] [bathurst] GraphML bathurst.graphml (0.9 MB) reloaded: 641 nodes, 1,560 edges
+23:57:34   buildings: rc=0 in 2s :: [PASS] [bathurst] buildings: 5,895 footprints -> bathurst.gpkg (1.7 MB, reread 5,895), peak 116 MB
+23:57:37   msclip: rc=0 in 3s :: NewBrunswick.zip: streamed 350,989 footprints |   [PASS] bathurst: 6,104 footprints -> data\buildings\microsoft\bathurst.gpkg (1.4 MB)
+23:57:40   scan: rc=0 in 4s :: bathurst: 3994 OSM / 5647 MS; 39 nbs {'red': 8, 'amber': 18, 'not_assessed': 13}; 1s; peak 186 MB
+23:57:40 [bathurst] DONE in 111s
+23:57:40 [edmundston] start; box (-68.40857, 47.3101, -68.24943, 47.4179)
+23:58:22   extract: rc=0 in 42s :: [edmundston] drivable subset: 859 ways, 6,508 nodes; estimated XML 2 MB | [edmundston] wrote edmundston-drive.osm: 1.2 MB  (42s, peak 151 MB)
+23:58:25   graph: rc=0 in 3s :: [edmundston] weakly connected components: 3; largest 665 nodes (98.8%); next: [6, 2] | [PASS] [edmundston] GraphML edmundston.graphml (1.0 MB) reloaded: 673 nodes, 1,691 edges
+23:58:27   buildings: rc=0 in 1s :: [PASS] [edmundston] buildings: 7,368 footprints -> edmundston.gpkg (2.2 MB, reread 7,368), peak 118 MB
+23:58:29   msclip: rc=0 in 3s :: NewBrunswick.zip: streamed 350,989 footprints |   [PASS] edmundston: 5,759 footprints -> data\buildings\microsoft\edmundston.gpkg (1.3 MB)
+23:58:35   scan: rc=0 in 5s :: edmundston: 5875 OSM / 5409 MS; 26 nbs {'not_assessed': 9, 'red': 5, 'amber': 12}; 3s; peak 188 MB
+23:58:35 [edmundston] DONE in 54s
+23:58:35 [campbellton] start; box (-66.74413, 47.95908, -66.60987, 48.04892)
+23:59:32   extract: rc=0 in 57s :: [campbellton] drivable subset: 323 ways, 2,128 nodes; estimated XML 1 MB | [campbellton] wrote campbellton-drive.osm: 0.4 MB  (55s, peak 143 MB)
+23:59:34   graph: rc=0 in 3s :: [campbellton] weakly connected components: 3; largest 401 nodes (99.0%); next: [2, 2] | [PASS] [campbellton] GraphML campbellton.graphml (0.5 MB) reloaded: 405 nodes, 1,051 edges
+23:59:34   low RAM before buildings campbellton: 1351 MB free (< 1500); waiting 30 s
+00:00:04   low RAM before buildings campbellton: 535 MB free (< 1500); waiting 30 s
+00:00:34   low RAM before buildings campbellton: 464 MB free (< 1500); waiting 30 s
+00:01:07   buildings: rc=0 in 3s :: [PASS] [campbellton] buildings: 1,963 footprints -> campbellton.gpkg (0.6 MB, reread 1,963), peak 111 MB
+00:01:10   msclip: rc=0 in 3s :: NewBrunswick.zip: streamed 350,989 footprints |   [PASS] campbellton: 3,556 footprints -> data\buildings\microsoft\campbellton.gpkg (0.8 MB)
+00:01:15   scan: rc=0 in 4s :: campbellton: 1733 OSM / 3092 MS; 13 nbs {'amber': 8, 'red': 3, 'not_assessed': 2}; 2s; peak 177 MB
+00:01:15 [campbellton] DONE in 160s
+00:01:15 [woodstock] start; box (-67.63883, 46.10508, -67.50917, 46.19492)
+00:02:18   extract: rc=0 in 64s :: [woodstock] drivable subset: 499 ways, 4,276 nodes; estimated XML 1 MB | [woodstock] wrote woodstock-drive.osm: 0.7 MB  (63s, peak 144 MB)
+00:02:18   low RAM before graph woodstock: 915 MB free (< 1500); waiting 30 s
+00:02:51   graph: rc=0 in 3s :: [woodstock] weakly connected components: 2; largest 592 nodes (99.7%); next: [2] | [PASS] [woodstock] GraphML woodstock.graphml (0.8 MB) reloaded: 594 nodes, 1,431 edges
+00:02:53   buildings: rc=0 in 2s :: [PASS] [woodstock] buildings: 366 footprints -> woodstock.gpkg (0.2 MB, reread 366), peak 109 MB
+00:02:56   msclip: rc=0 in 3s :: NewBrunswick.zip: streamed 350,989 footprints |   [PASS] woodstock: 746 footprints -> data\buildings\microsoft\woodstock.gpkg (0.3 MB)
+00:02:59   scan: rc=0 in 3s :: woodstock: 357 OSM / 707 MS; 4 nbs {'not_assessed': 2, 'amber': 2}; 1s; peak 178 MB
+00:02:59 [woodstock] DONE in 104s
+00:02:59 [grand_falls] start; box (-67.80692, 47.00308, -67.67508, 47.09292)
+00:03:42   extract: rc=0 in 43s :: [grand_falls] drivable subset: 448 ways, 3,120 nodes; estimated XML 1 MB | [grand_falls] wrote grand_falls-drive.osm: 0.6 MB  (43s, peak 144 MB)
+00:03:44   graph: rc=0 in 2s :: [grand_falls] weakly connected components: 1; largest 548 nodes (100.0%); next: [] | [PASS] [grand_falls] GraphML grand_falls.graphml (0.7 MB) reloaded: 548 nodes, 1,410 edges
+00:03:45   buildings: rc=0 in 1s :: [PASS] [grand_falls] buildings: 492 footprints -> grand_falls.gpkg (0.3 MB, reread 492), peak 109 MB
+00:03:48   msclip: rc=0 in 3s :: NewBrunswick.zip: streamed 350,989 footprints |   [PASS] grand_falls: 3,831 footprints -> data\buildings\microsoft\grand_falls.gpkg (0.9 MB)
+00:03:51   scan: rc=0 in 3s :: grand_falls: 465 OSM / 3641 MS; 17 nbs {'red': 3, 'amber': 9, 'not_assessed': 5}; 1s; peak 179 MB
+00:03:51 [grand_falls] DONE in 53s
+00:03:51 [sussex] start; box (-65.56933, 45.67508, -65.44067, 45.76492)
+00:04:34   extract: rc=0 in 42s :: [sussex] drivable subset: 518 ways, 3,983 nodes; estimated XML 1 MB | [sussex] wrote sussex-drive.osm: 0.7 MB  (42s, peak 146 MB)
+00:04:36   graph: rc=0 in 2s :: [sussex] weakly connected components: 1; largest 491 nodes (100.0%); next: [] | [PASS] [sussex] GraphML sussex.graphml (0.7 MB) reloaded: 491 nodes, 1,177 edges
+00:04:37   buildings: rc=0 in 1s :: [PASS] [sussex] buildings: 2,007 footprints -> sussex.gpkg (0.7 MB, reread 2,007), peak 111 MB
+00:04:40   msclip: rc=0 in 3s :: NewBrunswick.zip: streamed 350,989 footprints |   [PASS] sussex: 3,704 footprints -> data\buildings\microsoft\sussex.gpkg (0.9 MB)
+00:04:43   scan: rc=0 in 3s :: sussex: 1878 OSM / 3476 MS; 22 nbs {'not_assessed': 6, 'amber': 10, 'red': 6}; 1s; peak 179 MB
+00:04:43 [sussex] DONE in 52s
+00:04:43 [shediac] start; box (-64.60492, 46.17508, -64.47508, 46.26492)
+00:05:26   extract: rc=0 in 42s :: [shediac] drivable subset: 737 ways, 4,029 nodes; estimated XML 1 MB | [shediac] wrote shediac-drive.osm: 0.9 MB  (42s, peak 151 MB)
+00:05:28   graph: rc=0 in 2s :: [shediac] weakly connected components: 3; largest 720 nodes (98.4%); next: [8, 4] | [PASS] [shediac] GraphML shediac.graphml (0.9 MB) reloaded: 732 nodes, 1,735 edges
+00:05:30   buildings: rc=0 in 1s :: [PASS] [shediac] buildings: 5,629 footprints -> shediac.gpkg (1.6 MB, reread 5,629), peak 116 MB
+00:05:32   msclip: rc=0 in 3s :: NewBrunswick.zip: streamed 350,989 footprints |   [PASS] shediac: 4,108 footprints -> data\buildings\microsoft\shediac.gpkg (1.0 MB)
+00:05:36   scan: rc=0 in 4s :: shediac: 4379 OSM / 3716 MS; 20 nbs {'not_assessed': 8, 'red': 5, 'amber': 7}; 2s; peak 186 MB
+00:05:36 [shediac] DONE in 52s
+00:05:36 [sackville] start; box (-64.43055, 45.86008, -64.30145, 45.94992)
+00:06:20   extract: rc=0 in 44s :: [sackville] drivable subset: 272 ways, 1,898 nodes; estimated XML 1 MB | [sackville] wrote sackville-drive.osm: 0.3 MB  (44s, peak 145 MB)
+00:06:22   graph: rc=0 in 3s :: [sackville] weakly connected components: 2; largest 323 nodes (98.8%); next: [4] | [PASS] [sackville] GraphML sackville.graphml (0.4 MB) reloaded: 327 nodes, 751 edges
+00:06:24   buildings: rc=0 in 1s :: [PASS] [sackville] buildings: 3,213 footprints -> sackville.gpkg (1.0 MB, reread 3,213), peak 112 MB
+00:06:27   msclip: rc=0 in 3s :: NewBrunswick.zip: streamed 350,989 footprints |   [PASS] sackville: 2,879 footprints -> data\buildings\microsoft\sackville.gpkg (0.7 MB)
+00:06:30   scan: rc=0 in 3s :: sackville: 3010 OSM / 2668 MS; 14 nbs {'amber': 5, 'not_assessed': 2, 'red': 7}; 1s; peak 175 MB
+00:06:30 [sackville] DONE in 54s
+00:06:30 [st_stephen] start; box (-67.33974, 45.14808, -67.21226, 45.23792)
+00:07:21   extract: rc=0 in 51s :: [st_stephen] drivable subset: 469 ways, 3,926 nodes; estimated XML 1 MB | [st_stephen] wrote st_stephen-drive.osm: 0.7 MB  (51s, peak 147 MB)
+00:07:24   graph: rc=0 in 3s :: [st_stephen] weakly connected components: 2; largest 479 nodes (99.6%); next: [2] | [PASS] [st_stephen] GraphML st_stephen.graphml (0.7 MB) reloaded: 481 nodes, 1,127 edges
+00:07:25   buildings: rc=0 in 1s :: [PASS] [st_stephen] buildings: 3,973 footprints -> st_stephen.gpkg (1.3 MB, reread 3,973), peak 114 MB
+00:07:28   msclip: rc=0 in 3s :: NewBrunswick.zip: streamed 350,989 footprints |   [PASS] st_stephen: 3,549 footprints -> data\buildings\microsoft\st_stephen.gpkg (0.8 MB)
+00:07:32   scan: rc=0 in 4s :: st_stephen: 3352 OSM / 3274 MS; 17 nbs {'not_assessed': 2, 'red': 7, 'amber': 8}; 2s; peak 180 MB
+00:07:32 [st_stephen] DONE in 62s
+00:07:32 [caraquet] start; box (-65.00585, 47.74508, -64.87215, 47.83492)
+00:08:20   extract: rc=0 in 48s :: [caraquet] drivable subset: 211 ways, 1,396 nodes; estimated XML 0 MB | [caraquet] wrote caraquet-drive.osm: 0.3 MB  (48s, peak 143 MB)
+00:08:22   graph: rc=0 in 2s :: [caraquet] weakly connected components: 4; largest 222 nodes (75.0%); next: [70, 2, 2] | [PASS] [caraquet] GraphML caraquet.graphml (0.4 MB) reloaded: 296 nodes, 661 edges
+00:08:24   buildings: rc=0 in 1s :: [PASS] [caraquet] buildings: 255 footprints -> caraquet.gpkg (0.2 MB, reread 255), peak 109 MB
+00:08:27   msclip: rc=0 in 3s :: NewBrunswick.zip: streamed 350,989 footprints |   [PASS] caraquet: 2,573 footprints -> data\buildings\microsoft\caraquet.gpkg (0.6 MB)
+00:08:30   scan: rc=0 in 3s :: caraquet: 229 OSM / 2284 MS; 10 nbs {'amber': 6, 'not_assessed': 3, 'red': 1}; 1s; peak 172 MB
+00:08:30 [caraquet] DONE in 58s
+00:08:30 [richibucto] start; box (-64.93246, 46.62508, -64.80154, 46.71492)
+00:09:14   extract: rc=0 in 44s :: [richibucto] drivable subset: 208 ways, 1,414 nodes; estimated XML 0 MB | [richibucto] wrote richibucto-drive.osm: 0.3 MB  (44s, peak 143 MB)
+00:09:16   graph: rc=0 in 2s :: [richibucto] weakly connected components: 6; largest 238 nodes (94.4%); next: [6, 2, 2, 2, 2] | [PASS] [richibucto] GraphML richibucto.graphml (0.3 MB) reloaded: 252 nodes, 574 edges
+00:09:18   buildings: rc=0 in 1s :: [PASS] [richibucto] buildings: 302 footprints -> richibucto.gpkg (0.2 MB, reread 302), peak 108 MB
+00:09:20   msclip: rc=0 in 3s :: NewBrunswick.zip: streamed 350,989 footprints |   [PASS] richibucto: 2,050 footprints -> data\buildings\microsoft\richibucto.gpkg (0.5 MB)
+00:09:23   scan: rc=0 in 3s :: richibucto: 261 OSM / 1886 MS; 9 nbs {'not_assessed': 8, 'amber': 1}; 0s; peak 170 MB
+00:09:23 [richibucto] DONE in 53s
+00:09:23 === NB batch end ===

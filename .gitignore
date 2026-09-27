@@ -6,7 +6,10 @@ venv/
 
 # Data lives outside the repo (see DATA.md); never commit large or derived data
 data/
-out/
+out/*
+# survey results are small (~0.6 MB) and are the evidence behind quoted numbers
+!out/nb_survey/
+!out/maritimes/
 *.gpkg
 *.tif
 *.pbf

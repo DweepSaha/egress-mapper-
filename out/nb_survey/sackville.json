@@ -1,0 +1,251 @@
+{
+ "area": "sackville",
+ "bbox": [
+  -64.43055,
+  45.86008,
+  -64.30145,
+  45.94992
+ ],
+ "box_km2": 100.1,
+ "assessable_km2": 36.0,
+ "buildings_osm": 3010,
+ "buildings_ms": 2668,
+ "road_segments": 394,
+ "counts": {
+  "amber": 5,
+  "not_assessed": 2,
+  "red": 7
+ },
+ "n_neighbourhoods": 14,
+ "runtime_load_s": 0.3,
+ "runtime_total_s": 0.7,
+ "peak_mb": 175,
+ "params": {
+  "block_radius_m": 50.0,
+  "sweep_spacing_m": 50.0,
+  "min_homes": 30,
+  "min_footprint_m2": 40.0,
+  "max_assign_m": 150.0,
+  "boundary_buffer_m": 2000
+ },
+ "neighbourhoods": [
+  {
+   "nid": 0,
+   "status": "amber",
+   "homes": 55,
+   "homes_osm": 55,
+   "homes_ms": 46,
+   "gateways": 2,
+   "worst_cut": 21,
+   "worst_cut_osm": 21,
+   "worst_cut_ms": 17,
+   "rank": 10,
+   "choke": [
+    -64.379392,
+    45.89258
+   ]
+  },
+  {
+   "nid": 3,
+   "status": "amber",
+   "homes": 205,
+   "homes_osm": 205,
+   "homes_ms": 182,
+   "gateways": 10,
+   "worst_cut": 23,
+   "worst_cut_osm": 23,
+   "worst_cut_ms": 21,
+   "rank": 9,
+   "choke": [
+    -64.375849,
+    45.89275
+   ]
+  },
+  {
+   "nid": 4,
+   "status": "amber",
+   "homes": 119,
+   "homes_osm": 119,
+   "homes_ms": 101,
+   "gateways": 8,
+   "worst_cut": 15,
+   "worst_cut_osm": 15,
+   "worst_cut_ms": 13,
+   "rank": 11,
+   "choke": [
+    -64.361572,
+    45.891518
+   ]
+  },
+  {
+   "nid": 5,
+   "status": "not_assessed",
+   "homes": 430,
+   "homes_osm": 430,
+   "homes_ms": 343,
+   "gateways": 6,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 9,
+   "status": "red",
+   "homes": 188,
+   "homes_osm": 188,
+   "homes_ms": 129,
+   "gateways": 2,
+   "worst_cut": 37,
+   "worst_cut_osm": 37,
+   "worst_cut_ms": 37,
+   "rank": 5,
+   "choke": [
+    -64.361981,
+    45.901343
+   ]
+  },
+  {
+   "nid": 15,
+   "status": "red",
+   "homes": 40,
+   "homes_osm": 40,
+   "homes_ms": 39,
+   "gateways": 1,
+   "worst_cut": 40,
+   "worst_cut_osm": 40,
+   "worst_cut_ms": 39,
+   "rank": 4,
+   "choke": [
+    -64.355164,
+    45.902919
+   ]
+  },
+  {
+   "nid": 17,
+   "status": "amber",
+   "homes": 75,
+   "homes_osm": 75,
+   "homes_ms": 58,
+   "gateways": 2,
+   "worst_cut": 27,
+   "worst_cut_osm": 27,
+   "worst_cut_ms": 23,
+   "rank": 8,
+   "choke": [
+    -64.378014,
+    45.906847
+   ]
+  },
+  {
+   "nid": 18,
+   "status": "red",
+   "homes": 38,
+   "homes_osm": 38,
+   "homes_ms": 34,
+   "gateways": 1,
+   "worst_cut": 37,
+   "worst_cut_osm": 37,
+   "worst_cut_ms": 33,
+   "rank": 6,
+   "choke": [
+    -64.389963,
+    45.907637
+   ]
+  },
+  {
+   "nid": 29,
+   "status": "not_assessed",
+   "homes": 101,
+   "homes_osm": 101,
+   "homes_ms": 86,
+   "gateways": 3,
+   "worst_cut": 0,
+   "worst_cut_osm": 0,
+   "worst_cut_ms": 0,
+   "rank": null,
+   "choke": null
+  },
+  {
+   "nid": 35,
+   "status": "amber",
+   "homes": 56,
+   "homes_osm": 56,
+   "homes_ms": 50,
+   "gateways": 2,
+   "worst_cut": 15,
+   "worst_cut_osm": 15,
+   "worst_cut_ms": 13,
+   "rank": 12,
+   "choke": [
+    -64.353552,
+    45.897255
+   ]
+  },
+  {
+   "nid": 39,
+   "status": "red",
+   "homes": 34,
+   "homes_osm": 34,
+   "homes_ms": 29,
+   "gateways": 1,
+   "worst_cut": 34,
+   "worst_cut_osm": 34,
+   "worst_cut_ms": 29,
+   "rank": 7,
+   "choke": [
+    -64.374455,
+    45.890569
+   ]
+  },
+  {
+   "nid": 41,
+   "status": "red",
+   "homes": 59,
+   "homes_osm": 59,
+   "homes_ms": 47,
+   "gateways": 1,
+   "worst_cut": 58,
+   "worst_cut_osm": 58,
+   "worst_cut_ms": 46,
+   "rank": 2,
+   "choke": [
+    -64.373318,
+    45.906267
+   ]
+  },
+  {
+   "nid": 43,
+   "status": "red",
+   "homes": 63,
+   "homes_osm": 63,
+   "homes_ms": 53,
+   "gateways": 1,
+   "worst_cut": 62,
+   "worst_cut_osm": 62,
+   "worst_cut_ms": 53,
+   "rank": 1,
+   "choke": [
+    -64.357249,
+    45.926207
+   ]
+  },
+  {
+   "nid": 51,
+   "status": "red",
+   "homes": 42,
+   "homes_osm": 42,
+   "homes_ms": 35,
+   "gateways": 1,
+   "worst_cut": 42,
+   "worst_cut_osm": 42,
+   "worst_cut_ms": 35,
+   "rank": 3,
+   "choke": [
+    -64.370541,
+    45.91564
+   ]
+  }
+ ]
+}
