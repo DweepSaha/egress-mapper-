@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Egress</title>
+<link rel="stylesheet" href="/vendor/maplibre-gl-6.11.2/maplibre-gl.css">
+<style>
+  :root { --bg: #05070a; --fg: #dfe4ea; --muted: #8592a0; --line: #2a3440; --accent: #7fdcff; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg);
+               font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #globe { position: absolute; inset: 0; }
+  #intro { position: absolute; left: clamp(20px, 7vw, 120px); top: 50%; transform: translateY(-50%); z-index: 2;
+           max-width: 460px; pointer-events: none; }
+  #intro > * { pointer-events: auto; }
+  .mark { font-weight: 800; letter-spacing: .3em; font-size: 40px; margin: 0; opacity: 0; }
+  .line { font-size: 17px; color: var(--fg); margin: 14px 0 6px; opacity: 0; }
+  .sub { font-size: 13px; color: var(--muted); margin: 0 0 22px; opacity: 0; }
+  .choose { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+            margin-bottom: 8px; opacity: 0; }
+  .loc { display: block; width: 100%; text-align: left; margin: 8px 0; padding: 12px 14px; border-radius: 8px;
+         border: 1px solid var(--line); background: rgba(13, 17, 22, .82); color: var(--fg); font: inherit;
+         cursor: pointer; opacity: 0; transition: border-color .15s, background .15s; }
+  .loc:hover:not(:disabled), .loc:focus-visible { border-color: var(--accent); background: rgba(18, 38, 52, .9); outline: none; }
+  .loc:disabled { cursor: default; }
+  .loc b { display: block; font-size: 16px; }
+  .loc span { color: var(--muted); font-size: 12.5px; }
+  .skip { display: inline-block; margin-top: 12px; color: var(--muted); font-size: 13px; opacity: 0; }
+  .skip:hover { color: var(--fg); }
+  #attrib { position: absolute; right: 10px; bottom: 6px; z-index: 2; font-size: 11px; color: #5d6875; }
+  #veil { position: fixed; inset: 0; background: #07090c; opacity: 0; pointer-events: none; z-index: 5; }
+  @media (max-width: 700px) { #intro { left: 16px; right: 16px; top: auto; bottom: 20px; transform: none; } .mark { font-size: 30px; } }
+</style>
+</head>
+<body>
+<div id="globe"></div>
+<main id="intro">
+  <h1 class="mark">EGRESS</h1>
+  <p class="line">Some neighbourhoods depend on one stretch of road to reach a major road. Egress finds where a single
+    blocked road area would cut the most mapped buildings off.</p>
+  <p class="sub">Built from OpenStreetMap roads and mapped building footprints. It does not predict hazards, traffic or
+    evacuation times.</p>
+  <div class="choose">Choose a location</div>
+  <button class="loc" data-area="tantallon"><b>Upper Tantallon, NS</b><span>Nova Scotia</span></button>
+  <button class="loc" data-area="fredericton"><b>Fredericton, NB</b><span>New Brunswick</span></button>
+  <a class="skip" href="/?map">Open the map directly →</a>
+</main>
+<div id="attrib">Roads © OpenStreetMap contributors</div>
+<div id="veil"></div>
+<script src="/vendor/animejs-3.2.2/anime.min.js"></script>
+<script type="module" src="/welcome.js"></script>
+</body>
+</html>

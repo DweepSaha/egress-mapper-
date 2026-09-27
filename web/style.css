@@ -267,3 +267,8 @@ details.method p { margin: 6px 0; }
              animation: attn 650ms ease-out forwards; }
 @keyframes attn { from { transform: scale(.6); opacity: .9; } to { transform: scale(3.2); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .attn-ring { display: none; } }
+
+/* arriving from the landing page: the shell fades in over the same dark background (no effect on deep links) */
+html.arrive #app { animation: arrive 700ms ease-out both; }
+@keyframes arrive { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { html.arrive #app { animation: none; } }

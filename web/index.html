@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Egress</title>
+<script>
+  // The landing page is optional: only a bare "/" (no query string, no hash) goes there, replacing this history entry
+  // so Back never loops. Every deep link, ?map and every self-test opens the map directly, unchanged.
+  if (!location.search && !location.hash) location.replace("/welcome.html");
+  else if (new URLSearchParams(location.search).get("from") === "welcome") document.documentElement.classList.add("arrive");
+</script>
 <link rel="stylesheet" href="/vendor/maplibre-gl-6.11.2/maplibre-gl.css">
 <link rel="stylesheet" href="/style.css">
 </head>
