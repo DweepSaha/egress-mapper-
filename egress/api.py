@@ -14,6 +14,14 @@ AREAS = {
     "tantallon": dict(label="Upper Tantallon, NS", center=[-63.862, 44.715], zoom=13.2),
     "fredericton": dict(label="Fredericton, NB", center=[-66.645, 45.958], zoom=12.5),
 }
+# Scenario availability per area - the single source of truth for the API and the map.
+#   fire_hyp  : a supplied circle; area-agnostic (fire.hypothetical needs only the loaded area).
+#   fire_hist : the 2023 NBAC perimeter - the only mapped perimeter intersecting any study box (Tantallon).
+#   flood     : Fredericton only - flood.py hardcodes the Fredericton gauge, datum offset and river seed.
+SCENARIOS = {"tantallon": dict(flood=False, fire_hyp=True, fire_hist=True),
+             "fredericton": dict(flood=True, fire_hyp=True, fire_hist=False)}
+for _k, _v in AREAS.items():
+    _v["scenarios"] = SCENARIOS[_k]
 
 _cache: dict[str, dict] = {}
 _lock = Lock()
@@ -119,15 +127,19 @@ def flood_scenario(gauge: float):
 
 @app.get("/api/tantallon/fire/historical")
 def fire_historical():
-    """Road access under the MAPPED 2023 Upper Tantallon fire perimeter (NBAC). Not a fire-spread prediction."""
-    return fire.historical(get("tantallon")["area"])
+    """Road access under the MAPPED 2023 Upper Tantallon fire perimeter (NBAC). Not a fire-spread prediction.
+    Tantallon only: no other mapped perimeter intersects a study box."""
+    return {**fire.historical(get("tantallon")["area"]), "area": "tantallon"}
 
 
-@app.get("/api/tantallon/fire/hypothetical")
-def fire_hypothetical(lon: float, lat: float, radius: float):
-    """Road access under a SUPPLIED hypothetical circular area. The radius is an input, not predicted spread."""
+@app.get("/api/{area}/fire/hypothetical")
+def fire_hypothetical(area: str, lon: float, lat: float, radius: float):
+    """Road access under a SUPPLIED hypothetical circular area in the REQUESTED study area. The radius is an input, not
+    predicted spread. The response carries the area it was computed for, so a client can reject a mismatch."""
+    if area not in AREAS or not SCENARIOS[area]["fire_hyp"]:
+        raise HTTPException(404, f"hypothetical fire is not available for {area!r}")
     try:
-        return fire.hypothetical(get("tantallon")["area"], lon, lat, radius)
+        return {**fire.hypothetical(get(area)["area"], lon, lat, radius), "area": area}
     except ValueError as e:                     # non-finite / out-of-range centre or radius
         raise HTTPException(400, str(e))
 

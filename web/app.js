@@ -176,11 +176,18 @@ map.addLayer({ id: "fi-cut", type: "line", source: "fi-cut", layout: { visibilit
 map.addLayer({ id: "fi-roads", type: "line", source: "fi-roads", layout: { visibility: "none", "line-cap": "round" },
   paint: { "line-color": "#fde047", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 6] } });
 const FIRE_LAYERS = ["fi-zone", "fi-zone-line", "fi-cut", "fi-roads"];
-let fireOn = false, fireGen = 0, fireData = null, fireMode = "hyp", fireCentre = null, fireSavedSel = null, fireSavedBld = null;
+let fireOn = false, fireGen = 0, fireData = null, fireMode = "hyp", fireCentre = null;
+// The vulnerability view saved when the FIRST scenario opens (selection + footprint source/pin). Switching flood <-> fire
+// hands it over unchanged ("handoff"); returning to vulnerability restores it; selection/area changes discard it.
+let scenSaved = null;
+// scenario availability comes from the server (/api/areas -> scenarios); unknown = unavailable
+const can = (area, what) => !!(area && areas[area] && areas[area].scenarios && areas[area].scenarios[what]);
+const normFireMode = (mode, area = current) => (mode === "hist" && can(area, "fire_hist") ? "hist" : "hyp");
+const exitHow = (h) => (h === true || h === undefined ? "restore" : h === false ? "discard" : h);
 
 let current = null, scanData = null, selected = null;
 let drawing = false, clicks = [];
-let floodOn = false, floodGen = 0, floodData = null, floodInfo = null, floodSavedSel = null, floodSavedBld = null;
+let floodOn = false, floodGen = 0, floodData = null, floodInfo = null;
 let bldStateN = 0, coverFeatures = 0, floodAct = 0, coverInstalled = false;
 let bldGen = 0, bldAppliedNs = null;
 // Displayed footprint ids are namespaced per (area, source) so a category id from one source/area can never match a
@@ -263,8 +270,9 @@ function panelHtml(p) {
 
 function select(nid) {
   clearProbe();                            // a placed blockage belongs to one neighbourhood; never carried over
-  if (floodOn) exitFlood(false);           // selecting a neighbourhood returns to the vulnerability view
-  if (fireOn) exitFire(false);
+  if (floodOn) exitFlood("discard");       // selecting a neighbourhood returns to the vulnerability view
+  if (fireOn) exitFire("discard");
+  scenSaved = null;
   if (selected !== null) map.setFeatureState({ source: "streets", id: selected }, { selected: false });
   selected = nid;
   const f = scanData.neighbourhoods.features.find((f) => f.id === nid);
@@ -401,8 +409,9 @@ function renderOverview() {
 }
 
 async function loadArea(name) {
-  if (floodOn) exitFlood(false);          // switching areas always clears the flood scenario
-  if (fireOn) exitFire(false);            // ...and the fire scenario
+  if (floodOn) exitFlood("discard");      // switching areas always clears the flood scenario
+  if (fireOn) exitFire("discard");        // ...and the fire scenario
+  scenSaved = null; fireMode = "hyp";     // nothing (selection, source, historical mode) carries across areas
   // clear the old area's building categories and footprints NOW, not when the new footprints arrive
   bldCats = null; bldPinned = null;
   map.removeFeatureState({ source: "bld" }); bldStateN = 0;
@@ -642,15 +651,14 @@ async function runFlood(g) {
 }
 
 async function enterFlood(g) {
-  if (current !== "fredericton") return;
+  if (!can(current, "flood")) return;
   // every enable / disable / explicit level bumps floodAct, so an older initialization that resumes after an await
   // (e.g. a slow /flood/info) exits without touching controls, coverage, the slider or the calculation
   const act = ++floodAct, area = current;
   const want = g !== undefined ? (+g).toFixed(2) : $("gauge").value;
   if (!floodOn) {
     clearMitigation();
-    floodSavedSel = selected;
-    floodSavedBld = { src: bldShown.src, pinned: bldPinned };   // restored exactly on exit
+    if (!scenSaved) scenSaved = { sel: selected, src: bldShown.src, pinned: bldPinned };   // only when leaving vulnerability
     if (selected !== null) map.setFeatureState({ source: "streets", id: selected }, { selected: false });
     selected = null;
     $("panel").classList.add("hidden");
@@ -680,7 +688,8 @@ async function enterFlood(g) {
   return runFlood(want);
 }
 
-function exitFlood(restoreSelection = true) {
+function exitFlood(how = "restore") {           // "restore" | "discard" | "handoff" (booleans: true/false)
+  how = exitHow(how);
   floodGen++; floodAct++;                       // invalidate pending scenario requests AND initializations
   floodOn = false; floodData = null; coverInstalled = false;
   ["fl-water", "fl-roads", "fl-cut"].forEach((l) => map.getSource(l).setData(empty));
@@ -692,14 +701,20 @@ function exitFlood(restoreSelection = true) {
   syncMode();
   $("floodOut").innerHTML = ""; delete $("floodOut").dataset.state;
   delete shownNum["fl-km"]; delete shownNum["fl-cut"];
-  const saved = floodSavedBld; floodSavedBld = null;
-  if (restoreSelection && saved) {               // restore the pre-flood footprint source and the viewer's pin
+  leaveScenario(how);
+}
+
+// Shared exit tail for flood and fire. restore: back to the saved vulnerability view (selection + footprint source/pin);
+// discard: drop it (selection or area changed); handoff: keep it for the next scenario (flood <-> fire).
+function leaveScenario(how) {
+  if (how === "handoff") { applyBuildingCats(); return; }
+  const saved = scenSaved; scenSaved = null;
+  if (how === "restore" && saved) {
     bldPinned = saved.pinned;
     if (saved.src && bldShown.src !== saved.src) loadBuildings(current, saved.src);   // applies categories on arrival
   }
   applyBuildingCats();                           // no-op until the (possibly restored) source is ready
-  const sel = floodSavedSel; floodSavedSel = null;
-  if (restoreSelection && sel !== null) select(sel);
+  if (how === "restore" && saved && saved.sel !== null) select(saved.sel);
 }
 
 $("gauge").oninput = (e) => updateGaugeReadout(e.target.value);
@@ -767,8 +782,9 @@ async function runFire() {
   const out = $("fireOut");
   if (mode === "hyp" && !fireCentre) { out.innerHTML = ""; delete out.dataset.state; return; }
   const radius = +$("fireRadius").value;
-  const url = mode === "hist" ? "/api/tantallon/fire/historical"
-    : `/api/tantallon/fire/hypothetical?lon=${fireCentre[0]}&lat=${fireCentre[1]}&radius=${radius}`;
+  if (mode === "hist" && !can(area, "fire_hist")) return;       // never request another area's perimeter
+  const url = mode === "hist" ? `/api/${area}/fire/historical`
+    : `/api/${area}/fire/hypothetical?lon=${fireCentre[0]}&lat=${fireCentre[1]}&radius=${radius}`;
   out.dataset.state = "pending";
   out.innerHTML = `<div class="src">Calculating…</div>`;
   let s;
@@ -782,6 +798,10 @@ async function runFire() {
     return;
   }
   if (gen !== fireGen || !fireOn || area !== current || mode !== fireMode) return;   // superseded: touch nothing
+  if (s.area !== area) {                                       // computed for another area: never label it as this one
+    out.dataset.state = "error"; out.innerHTML = `<div class="cut">Couldn't calculate this scenario (area mismatch).</div>`;
+    return;
+  }
   fireData = { ...s, area };
   map.getSource("fi-zone").setData(s.zone);
   map.getSource("fi-roads").setData(s.roads_affected);
@@ -795,6 +815,7 @@ async function runFire() {
 }
 
 function setFireMode(mode) {
+  mode = normFireMode(mode);                   // e.g. a remembered "hist" is not carried into Fredericton
   fireMode = mode;
   document.querySelectorAll("#fireModes button").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
   $("fireHyp").classList.toggle("hidden", mode !== "hyp");
@@ -807,11 +828,10 @@ function setFireMode(mode) {
 }
 
 function enterFire(mode) {
-  if (current !== "tantallon") return;
+  if (!can(current, "fire_hyp")) return;
   if (!fireOn) {
     clearMitigation();
-    fireSavedSel = selected;
-    fireSavedBld = { src: bldShown.src, pinned: bldPinned };   // restored exactly on exit
+    if (!scenSaved) scenSaved = { sel: selected, src: bldShown.src, pinned: bldPinned };   // only when leaving vulnerability
     if (selected !== null) map.setFeatureState({ source: "streets", id: selected }, { selected: false });
     selected = null;
     $("panel").classList.add("hidden");
@@ -822,10 +842,11 @@ function enterFire(mode) {
     $("drawBtn").disabled = true;
     $("fireCtl").classList.remove("hidden");
   }
-  setFireMode(mode || fireMode);
+  setFireMode(normFireMode(mode || fireMode));
 }
 
-function exitFire(restoreSelection = true) {
+function exitFire(how = "restore") {            // "restore" | "discard" | "handoff" (booleans: true/false)
+  how = exitHow(how);
   fireGen++;                                    // invalidate any pending scenario request
   fireOn = false; fireData = null; fireCentre = null;
   ["fi-zone", "fi-roads", "fi-cut"].forEach((l) => map.getSource(l).setData(empty));
@@ -838,14 +859,8 @@ function exitFire(restoreSelection = true) {
   syncMode();
   $("fireOut").innerHTML = ""; delete $("fireOut").dataset.state;
   delete shownNum["fi-km"];
-  const saved = fireSavedBld; fireSavedBld = null;
-  if (restoreSelection && saved) {
-    bldPinned = saved.pinned;
-    if (saved.src && bldShown.src !== saved.src) loadBuildings(current, saved.src);
-  }
-  applyBuildingCats();
-  const sel = fireSavedSel; fireSavedSel = null;
-  if (restoreSelection && sel !== null) select(sel);
+  if (!can(current, "fire_hist")) fireMode = "hyp";            // never remember a mode this area cannot run
+  leaveScenario(how);
 }
 
 
@@ -1102,9 +1117,11 @@ function syncMode() {
   $("ctxArea").textContent = current ? areas[current].label : "";
   document.querySelectorAll("#modes button").forEach((b) => {
     b.classList.toggle("on", b.dataset.mode === (mode === "mit" ? "vuln" : mode));
-    if (b.dataset.mode === "flood") b.classList.toggle("hidden", current !== "fredericton");   // flood: Fredericton only
-    if (b.dataset.mode === "fire") b.classList.toggle("hidden", current !== "tantallon");      // fire: Tantallon only
+    if (b.dataset.mode === "flood") b.classList.toggle("hidden", !can(current, "flood"));     // Fredericton only
+    if (b.dataset.mode === "fire") b.classList.toggle("hidden", !can(current, "fire_hyp"));   // both areas
   });
+  const histBtn = document.querySelector('#fireModes [data-mode="hist"]');
+  if (histBtn) histBtn.classList.toggle("hidden", !can(current, "fire_hist"));              // Tantallon only
   $("vulnBox").classList.toggle("hidden", floodOn || fireOn);
   $("floodBox").classList.toggle("hidden", !floodOn);
   $("fireBox").classList.toggle("hidden", !fireOn);
@@ -1123,8 +1140,8 @@ function renderSummary() {
 document.querySelectorAll("#modes button").forEach((b) => (b.onclick = () => {
   const m = b.dataset.mode;
   if (m === "vuln") { if (floodOn) exitFlood(); if (fireOn) exitFire(); }
-  else if (m === "flood") { if (fireOn) exitFire(false); if (!floodOn) enterFlood(); }
-  else if (m === "fire") { if (floodOn) exitFlood(false); if (!fireOn) enterFire(); }
+  else if (m === "flood") { if (!can(current, "flood")) return; if (fireOn) exitFire("handoff"); if (!floodOn) enterFlood(); }
+  else if (m === "fire") { if (!can(current, "fire_hyp")) return; if (floodOn) exitFlood("handoff"); if (!fireOn) enterFire(); }
 }));
 $("resetView").onclick = () => current && map.flyTo({ center: areas[current].center, zoom: areas[current].zoom,
                                                         pitch: view === "3d" ? PITCH_3D : 0, bearing: view === "3d" ? BEARING_3D : 0, duration: dur(800) });
@@ -1173,7 +1190,7 @@ function setView(v, animate = true) {
   $("viewNote").classList.toggle("hidden", !is3d);
 }
 document.querySelectorAll("#viewCtl button").forEach((b) => (b.onclick = () => setView(b.dataset.view)));
-document.querySelectorAll("#fireModes button").forEach((b) => (b.onclick = () => fireOn && setFireMode(b.dataset.mode)));
+document.querySelectorAll("#fireModes button").forEach((b) => (b.onclick = () => fireOn && setFireMode(normFireMode(b.dataset.mode))));
 $("fireRadius").oninput = (e) => ($("fireRadiusVal").textContent = `${(+e.target.value).toLocaleString()} m`);
 $("fireRadius").onchange = () => fireOn && fireMode === "hyp" && runFire();   // on release
 map.on("click", (e) => {
@@ -1198,15 +1215,16 @@ if (q.get("road")) {
   const v = q.get("road").split(",").map(Number);
   if (v.length === 4 && v.every(Number.isFinite)) { clicks = [[v[0], v[1]], [v[2], v[3]]]; runMitigation(); }
 }
-// scenario deep links (demo backup): &mode=flood[&gauge=8.36] on Fredericton; &mode=fire&fire=hist|hyp[&c=lon,lat&r=500] on Tantallon
-if (q.get("mode") === "flood" && current === "fredericton") {
+// scenario deep links (demo backup): &mode=flood[&gauge=8.36] where flood exists; &mode=fire&fire=hyp[&c=lon,lat&r=500]
+// where hypothetical fire exists; &fire=hist only where the mapped perimeter exists (otherwise normalised to hyp)
+if (q.get("mode") === "flood" && can(current, "flood")) {
   const g = Number(q.get("gauge"));
   enterFlood(q.get("gauge") && g >= +$("gauge").min && g <= +$("gauge").max ? g : undefined);
-} else if (q.get("mode") === "fire" && current === "tantallon") {
+} else if (q.get("mode") === "fire" && can(current, "fire_hyp")) {
   const c = (q.get("c") || "").split(",").map(Number), r = Number(q.get("r"));
   if (r >= +$("fireRadius").min && r <= +$("fireRadius").max) { $("fireRadius").value = r; $("fireRadiusVal").textContent = `${r.toLocaleString()} m`; }
   if (c.length === 2 && c.every(Number.isFinite)) fireCentre = c;
-  enterFire(q.get("fire") === "hist" ? "hist" : "hyp");
+  enterFire(normFireMode(q.get("fire") === "hist" ? "hist" : "hyp"));
 }
 window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
   bldTest, reapply: () => applyBuildingCats(),
@@ -1278,6 +1296,9 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
   view: (v, animate = true) => setView(v, animate), viewState: () => ({ view, pitch: map.getPitch(), bearing: map.getBearing(),
     vis3d: map.getLayoutProperty("bld-3d", "visibility"), vis2d: map.getLayoutProperty("bld-fill", "visibility"),
     noteHidden: $("viewNote").classList.contains("hidden") }),
+  scenSaved: () => scenSaved && { ...scenSaved },
+  fireDataArea: () => fireData && fireData.area,
+  histHidden: () => document.querySelector('#fireModes [data-mode="hist"]').classList.contains("hidden"),
   fireState: () => ({ on: fireOn, mode: fireMode, area: current, cardState: $("fireOut").dataset.state || null,
     cardText: $("fireOut").textContent.replace(/\s+/g, " ").trim(), bldStates: bldStateN,
     boxHidden: document.querySelector('#modes [data-mode="fire"]').classList.contains("hidden") }),
@@ -1292,4 +1313,4 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
              clearVisible: !document.getElementById("clearBtn").classList.contains("hidden") };
   },
 };
-if (["1", "flood", "fire", "3d", "demo", "probe", "motion"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only
+if (["1", "flood", "fire", "3d", "demo", "probe", "motion", "xarea"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only

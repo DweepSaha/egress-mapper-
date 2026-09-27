@@ -100,10 +100,25 @@ def main():
     print("PASS baseline scan unchanged (Westwood still red)")
 
 
+def fredericton_hypothetical(tan):
+    """Hypothetical fire is area-agnostic: Fredericton at Codex's reference point, never mixed with Tantallon."""
+    fr = engine.load_area("fredericton")
+    f = fire.hypothetical(fr, -66.645, 45.958, 500)
+    t = fire.hypothetical(tan, -66.645, 45.958, 500)            # same inputs, other area: must be its own result
+    disjoint(f)
+    assert f["roads_affected_km"] > 0 and f["counts"]["inside"]["osm"] > 0, f["counts"]
+    assert t["roads_affected_km"] == 0 and t is not f, (t["roads_affected_km"],)
+    print(f"PASS Fredericton hypothetical r=500 m at [-66.645, 45.958]: roads {f['roads_affected_km']} km, "
+          f"lose {f['counts']['lose_access']}, inside {f['counts']['inside']}; same inputs in Tantallon -> 0 km (no cross-area mixing)")
+
+
 if __name__ == "__main__":
     if not config.roads_graphml("tantallon").exists() or not fire.NBAC_PATH.exists():
         print("SKIP (prepared data not found)"); sys.exit(0)
     try:
-        main(); print("ALL PASS")
+        main()
+        if config.roads_graphml("fredericton").exists():
+            fredericton_hypothetical(engine.load_area("tantallon"))
+        print("ALL PASS")
     except AssertionError as e:
         print(f"FAIL: {e}"); sys.exit(1)

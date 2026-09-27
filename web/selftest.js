@@ -14,9 +14,10 @@ const bldDelays = [];     // ... to /buildings/ footprint responses
 const fireDelays = [];    // ... to /fire/ scenario responses
 const probeDelays = [];   // ... to /probe responses (user-placed blockage)
 const probeBodies = [];   // request bodies sent to /probe (the raw release point)
-let apiCalls = 0;         // every /api/ request (the 3D suite asserts that toggling 2D/3D makes none)
+let apiCalls = 0;
+const urlLog = [];        // every request URL, in order (xarea suite)         // every /api/ request (the 3D suite asserts that toggling 2D/3D makes none)
 window.fetch = async (url, opts) => {
-  if (String(url).includes("/api/")) apiCalls++;
+  if (String(url).includes("/api/")) { apiCalls++; urlLog.push(String(url)); }
   for (const [needle, q] of [["/flood/info", infoDelays], ["/buildings/", bldDelays]]) {
     if (String(url).includes(needle)) {
       const d = q.length ? q.shift() : 0;
@@ -171,9 +172,10 @@ async function fireSuite() {
   const FIRE = ["fi-zone", "fi-zone-line", "fi-cut", "fi-roads"], SCAN = ["choke", "blocked", "blocked-hatch", "blocked-edge", "cut"];
   const C = [-63.854, 44.7052];
   await app.loadArea("fredericton");
-  record("X1 fire control only on Tantallon", app.fireState().boxHidden, app.fireState());
+  record("X1 Fredericton: hypothetical fire available, mapped 2023 perimeter not offered",
+    !app.fireState().boxHidden && app.histHidden(), app.fireState());
   await app.loadArea("tantallon"); app.select(99);
-  record("X1b fire control shown on Tantallon", !app.fireState().boxHidden, app.fireState());
+  record("X1b Tantallon: fire available including the mapped 2023 perimeter", !app.fireState().boxHidden && !app.histHidden(), app.fireState());
 
   // X2 historical: labelled as the mapped 2023 perimeter, entrances outside, no-spread statement, scan overlays hidden
   app.fire("hist"); await waitDone();
@@ -209,7 +211,7 @@ async function fireSuite() {
   fireDelays.push(2000); app.fire("hyp", C, 500); await sleep(200);
   await app.loadArea("fredericton"); await sleep(2300);
   const x6 = app.fireState(), v6 = vis();
-  record("X6 area switch clears fire", !x6.on && x6.boxHidden && x6.cardText === "" && FIRE.every((l) => v6[l] === "none"),
+  record("X6 area switch clears fire", !x6.on && app.histHidden() && x6.mode === "hyp" && x6.cardText === "" && FIRE.every((l) => v6[l] === "none"),
          { x6, v6 });
 }
 
@@ -470,6 +472,64 @@ async function motionSuite() {
     vs.vis3d === "none" && !P().shown, { view: vs, selected: snapB.selected });
 }
 
+async function xareaSuite() {
+  // hypothetical fire on Fredericton: area-aware routing, no historical carry-over, flood <-> fire state hand-over
+  const FC = [-66.645, 45.958];
+  const done = async () => { for (let i = 0; i < 150 && app.fireState().cardState !== "done"; i++) await sleep(200); };
+  // (a) Fredericton hypothetical fire is computed for Fredericton, never Tantallon
+  await app.loadArea("fredericton"); await sleep(500);
+  urlLog.length = 0;
+  app.fire("hyp", FC, 500); await done();
+  const reqs = urlLog.filter((u) => u.includes("/fire/"));
+  const direct = await (await fetch(`/api/fredericton/fire/hypothetical?lon=${FC[0]}&lat=${FC[1]}&radius=500`)).json();
+  const st = app.fireState();
+  record("XA Fredericton hypothetical fire requests /api/fredericton/..., response and state are Fredericton's",
+    reqs.length === 1 && reqs[0].includes("/api/fredericton/fire/hypothetical") && app.fireDataArea() === "fredericton" &&
+    direct.area === "fredericton" && st.cardText.includes(`${direct.roads_affected_km} km`),
+    { reqs, area: app.fireDataArea(), km: direct.roads_affected_km });
+  app.unfire();
+  // (b) historical mode never carries into Fredericton (remembered, button, or explicit request)
+  await app.loadArea("tantallon"); await sleep(500);
+  app.fire("hist"); await done();
+  const histOk = app.fireState().mode === "hist" && app.fireState().cardText.includes("Mapped 2023 fire perimeter");
+  await app.loadArea("fredericton"); await sleep(500);
+  urlLog.length = 0;
+  document.querySelector('#modes [data-mode="fire"]').click(); await sleep(400);
+  const b1 = app.fireState();
+  app.fire("hist"); await sleep(400);                     // an explicit historical request on Fredericton
+  const b2 = app.fireState();
+  document.querySelector('#fireModes [data-mode="hist"]').click(); await sleep(400);
+  const b3 = app.fireState();
+  record("XB historical Tantallon -> Fredericton -> Fire: hypothetical mode, no perimeter request, no Westwood text",
+    histOk && [b1, b2, b3].every((s) => s.on && s.mode === "hyp" && !s.cardText.includes("Westwood")) && app.histHidden() &&
+    !urlLog.some((u) => u.includes("historical")), { b1: b1.mode, b2: b2.mode, b3: b3.mode, urls: urlLog.slice() });
+  app.unfire();
+  // (c) flood <-> fire keeps the vulnerability view to restore: selection + footprint source/pin
+  await app.loadArea("fredericton"); const nid = app.topNid(); app.select(nid); await sleep(1500);
+  const ms = document.querySelector('#bldInfo button[data-src="ms"]'); ms && ms.click(); await sleep(1500);
+  const v0 = JSON.parse(app.snapshot());
+  const tab = (m) => document.querySelector(`#modes [data-mode="${m}"]`).click();
+  tab("flood"); await sleep(300); await app.flood(8.36);
+  const osm = document.querySelector('#floodBld button[data-src="osm"]'); osm && osm.click(); await sleep(800);   // change source inside the scenario
+  tab("fire"); await sleep(400); app.fire("hyp", FC, 500); await done();
+  tab("flood"); await sleep(1500);
+  tab("vuln"); await sleep(1800);
+  const v1 = JSON.parse(app.snapshot());
+  record("XC1 flood -> fire -> flood -> vulnerability restores the original selection and footprint source/pin",
+    v0.selected === nid && v1.selected === nid && v1.bldPinned === v0.bldPinned && v1.bldPinned === "ms" &&
+    v1.panelText === v0.panelText && app.scenSaved() === null, { v0: [v0.selected, v0.bldPinned], v1: [v1.selected, v1.bldPinned, v1.bldSrc] });
+  tab("fire"); await sleep(400); app.fire("hyp", FC, 500); await done();
+  tab("flood"); await sleep(300); await app.flood(8.36);
+  tab("vuln"); await sleep(1800);
+  const v2 = JSON.parse(app.snapshot());
+  record("XC2 fire -> flood -> vulnerability restores it too", v2.selected === nid && v2.bldPinned === "ms" && app.scenSaved() === null,
+    { v2: [v2.selected, v2.bldPinned] });
+  tab("flood"); await sleep(300); await app.flood(8.36);
+  await app.loadArea("tantallon"); await sleep(600);
+  record("XC3 area switch from a scenario discards the saved view (nothing carries across areas)",
+    app.scenSaved() === null && JSON.parse(app.snapshot()).selected === null, {});
+}
+
 async function main() {
   const q = new URLSearchParams(location.search);
   if (q.get("selftest") === "flood") return floodSuite();
@@ -478,6 +538,7 @@ async function main() {
   if (q.get("selftest") === "demo") return demoSuite();
   if (q.get("selftest") === "probe") return probeSuite();
   if (q.get("selftest") === "motion") return motionSuite();
+  if (q.get("selftest") === "xarea") return xareaSuite();
   if (q.get("road")) {                                               // 5. deep link -> Clear
     for (let i = 0; i < 100 && app.state().cardState !== "done"; i++) await sleep(200);
     const before = app.state();
