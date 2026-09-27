@@ -2,6 +2,9 @@
 // Delays chosen /mitigate responses AFTER the server replies, so responses genuinely arrive out of order.
 // Results are written to <pre id="selftest"> as JSON.
 const app = window.__app;
+// scenario layers are shown/hidden by their opacity TARGET (MapLibre transitions ease towards it)
+const off = (l) => Object.values(app.fadeState(l)).every((v) => v === 0);
+const on = (l) => Object.values(app.fadeState(l)).some((v) => v > 0);
 const W = [[-63.87399, 44.72806], [-63.85501, 44.70479]];          // exact Westwood demo proposal (unchanged)
 const ENT = [[-63.855646, 44.704433], [-63.852344, 44.706056]];    // joins the two entrance junctions (quick reply)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -163,7 +166,7 @@ async function floodSuite() {
   await app.loadArea("tantallon"); await sleep(300);
   const s6 = app.floodState(), snap6 = JSON.parse(app.snapshot());
   record("F6 area switch clears flood state", !s6.on && s6.boxHidden && s6.bldStates === 0 &&
-         ["fl-water", "fl-roads", "fl-cut", "fl-cover"].every((l) => snap6.vis[l] === "none"), { s6 });
+         snap6.vis["fl-cover"] === "none" && ["fl-water", "fl-roads", "fl-cut"].every((l) => off(l)), { s6 });
 }
 
 async function fireSuite() {
@@ -182,7 +185,7 @@ async function fireSuite() {
   const h = app.fireState(), vh = vis();
   record("X2 historical card", h.on && h.mode === "hist" && h.cardText.includes("Mapped 2023 fire perimeter") &&
          h.cardText.includes("Neither Westwood Hills entrance lies inside the mapped perimeter") && h.cardText.includes("0.96 km and 1.22 km") && h.cardText.includes("This tool does not predict fire spread") &&
-         FIRE.every((l) => vh[l] === "visible") && SCAN.every((l) => vh[l] === "none"), { card: h.cardText.slice(0, 200), vh });
+         FIRE.every(on) && SCAN.every(off) && app.streetsOpacity() === 0.25, { card: h.cardText.slice(0, 200) });
 
   // X3 hypothetical: two radii, first answers LAST -> only the newer one is shown
   arrivals.length = 0; fireDelays.push(2500, 0);
@@ -204,14 +207,14 @@ async function fireSuite() {
   // X5 exit restores the vulnerability view and selection exactly
   app.unfire(); await sleep(300);
   const x5 = app.fireState(), v5 = vis(), st5 = JSON.parse(app.snapshot());
-  record("X5 exit restores view", !x5.on && x5.cardText === "" && FIRE.every((l) => v5[l] === "none") &&
-         SCAN.every((l) => v5[l] === "visible") && st5.selected === 99, { x5, selected: st5.selected, v5 });
+  record("X5 exit restores view", !x5.on && x5.cardText === "" && FIRE.every(off) &&
+         SCAN.every(on) && app.streetsOpacity() === 1 && st5.selected === 99, { x5, selected: st5.selected });
 
   // X6 area switch while a fire request is pending clears everything
   fireDelays.push(2000); app.fire("hyp", C, 500); await sleep(200);
   await app.loadArea("fredericton"); await sleep(2300);
   const x6 = app.fireState(), v6 = vis();
-  record("X6 area switch clears fire", !x6.on && app.histHidden() && x6.mode === "hyp" && x6.cardText === "" && FIRE.every((l) => v6[l] === "none"),
+  record("X6 area switch clears fire", !x6.on && app.histHidden() && x6.mode === "hyp" && x6.cardText === "" && FIRE.every(off),
          { x6, v6 });
 }
 
@@ -602,6 +605,50 @@ async function fireDragSuite() {
     { mid7, selected: snap7.selected });
 }
 
+async function transSuite() {
+  // scenario transitions: opacity-only MapLibre transitions; state applied synchronously; interruptions land on the
+  // latest state; area switches snap; caveats never trail their numbers. Run with &motion=on.
+  const SCANL = ["choke", "blocked", "blocked-hatch", "blocked-edge", "cut"], FIREL = ["fi-zone", "fi-zone-line", "fi-cut", "fi-roads"];
+  const FLOODL = ["fl-water", "fl-water-line", "fl-cut", "fl-roads"];
+  const tab = (m) => document.querySelector(`#modes [data-mode="${m}"]`).click();
+  const fireDone = async () => { for (let i = 0; i < 150 && app.fireState().cardState !== "done"; i++) await sleep(150); };
+  const floodDone = async () => { for (let i = 0; i < 150 && app.floodState().cardState !== "done"; i++) await sleep(150); };
+  const vulnState = () => SCANL.every(on) && FIREL.every(off) && FLOODL.every(off) && app.streetsOpacity() === 1 &&
+    !app.fireState().on && !app.floodState().on;
+  await app.loadArea("tantallon"); app.select(99); await sleep(1200);
+  // T1 entering fire: state changes at once (scan overlays target 0, streets dimmed); the supplied area and its caveat
+  //    arrive together with the result
+  tab("fire"); const t1a = { scanOff: SCANL.every(off), dim: app.streetsOpacity() === 0.25, fireOff: FIREL.every(off) };
+  app.fire("hist"); await fireDone();
+  const card = app.fireState().cardText;
+  record("T1 fire: state switches at once; area eases in with its result; caveat present with the numbers",
+    t1a.scanOff && t1a.dim && t1a.fireOff && FIREL.every(on) && card.includes("This tool does not predict fire spread") &&
+    card.includes("817.8 ha"), t1a);
+  // T2 interrupted: fire -> vuln -> fire -> vuln within ~100 ms lands exactly on vulnerability (no blend)
+  tab("vuln"); await sleep(40); tab("fire"); await sleep(40); tab("vuln"); await sleep(900);
+  const s2 = JSON.parse(app.snapshot());
+  record("T2 switching again mid-fade lands on the final state (vulnerability), not a blend",
+    vulnState() && s2.selected === 99 && !app.bldDipped() && Object.values(app.fadeState("bld-fill"))[0] === 1, { selected: s2.selected, dipped: app.bldDipped() });
+  // T3 3D: the same interruption with extruded buildings
+  app.view("3d", false); await sleep(300);
+  tab("fire"); await sleep(40); tab("vuln"); await sleep(40); tab("fire"); await sleep(40); tab("vuln"); await sleep(900);
+  record("T3 3D: interrupted switches land on vulnerability; extrusions back at full opacity",
+    vulnState() && !app.bldDipped() && Math.abs(Object.values(app.fadeState("bld-3d"))[0] - 0.92) < 1e-9, app.fadeState("bld-3d"));
+  app.view("2d", false);
+  // T4 Fredericton flood <-> fire rapid switching ends in the last scenario only
+  await app.loadArea("fredericton"); await sleep(600);
+  tab("flood"); await sleep(40); tab("fire"); await sleep(40); tab("flood"); await floodDone(); await sleep(700);
+  record("T4 flood -> fire -> flood mid-fade: only flood is shown (water on, fire off, scan off)",
+    app.floodState().on && !app.fireState().on && FLOODL.every(on) && FIREL.every(off) && SCANL.every(off) &&
+    JSON.parse(app.snapshot()).vis["fl-cover"] === "visible", {});
+  // T5 area switch mid-transition snaps (duration 0) to the new area's vulnerability view
+  tab("vuln"); await sleep(40); tab("flood"); await sleep(40);
+  await app.loadArea("tantallon"); await sleep(200);
+  const tr = app.map.getPaintProperty("choke", "circle-opacity-transition");
+  record("T5 area switch during a transition snaps to the new area's vulnerability view",
+    vulnState() && tr && tr.duration === 0 && !app.bldDipped() && JSON.parse(app.snapshot()).vis["fl-cover"] === "none", { tr });
+}
+
 async function main() {
   const q = new URLSearchParams(location.search);
   if (q.get("selftest") === "flood") return floodSuite();
@@ -612,6 +659,7 @@ async function main() {
   if (q.get("selftest") === "motion") return motionSuite();
   if (q.get("selftest") === "xarea") return xareaSuite();
   if (q.get("selftest") === "firedrag") return fireDragSuite();
+  if (q.get("selftest") === "trans") return transSuite();
   if (q.get("road")) {                                               // 5. deep link -> Clear
     for (let i = 0; i < 100 && app.state().cardState !== "done"; i++) await sleep(200);
     const before = app.state();

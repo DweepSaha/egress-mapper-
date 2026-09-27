@@ -62,12 +62,16 @@ map.addLayer({ id: "roads", type: "line", source: "roads", paint: {
 map.addSource("bld", { type: "geojson", data: empty });
 const BLD_CAT = ["feature-state", "cat"];
 const BLD_COLOR = ["match", BLD_CAT, "cut", "#ff7a45", "inside", "#c084fc", "retain", "#4fb3a0", "#3b4452"];
-const BLD_OPACITY = ["match", BLD_CAT, "cut", 0.95, "inside", 0.95, "retain", 0.6, 0.35];
+// same look as before (category colour x category opacity) with the per-category opacity carried in the colour alpha,
+// so the layer's own opacity is a constant that MapLibre can transition (data-driven opacities are not transitioned)
+const BLD_FILL_RGBA = ["match", BLD_CAT, "cut", ["rgba", 255, 122, 69, 0.95], "inside", ["rgba", 192, 132, 252, 0.95],
+  "retain", ["rgba", 79, 179, 160, 0.6], ["rgba", 59, 68, 82, 0.35]];
+const BLD_LINE_RGBA = ["match", BLD_CAT, "cut", ["rgba", 255, 122, 69, 1], "inside", ["rgba", 192, 132, 252, 1],
+  "retain", ["rgba", 79, 179, 160, 0], ["rgba", 59, 68, 82, 0]];
 map.addLayer({ id: "bld-fill", type: "fill", source: "bld", minzoom: 12,
-  paint: { "fill-color": BLD_COLOR, "fill-opacity": BLD_OPACITY } }, "roads");
+  paint: { "fill-color": BLD_FILL_RGBA, "fill-opacity": 1 } }, "roads");
 map.addLayer({ id: "bld-line", type: "line", source: "bld", minzoom: 14,
-  paint: { "line-color": BLD_COLOR, "line-width": 0.6,
-           "line-opacity": ["match", BLD_CAT, "cut", 1, "inside", 1, 0] } }, "roads");
+  paint: { "line-color": BLD_LINE_RGBA, "line-width": 0.6, "line-opacity": 1 } }, "roads");
 // 3D view (presentation only): the same polygons and category colours, extruded to one fixed illustrative height.
 // Placed below the road layers so roads, choke points, the proposed connection and hazard lines stay readable on top.
 const BLD_HEIGHT_M = 14;         // illustrative, identical for every mapped building (real heights are not available)
@@ -81,12 +85,20 @@ map.setLight({ anchor: "viewport", color: "#ffffff", intensity: 0.6, position: [
 const SEL = ["boolean", ["feature-state", "selected"], false];
 map.addLayer({ id: "streets", type: "line", source: "streets", layout: { "line-cap": "round", "line-join": "round" },
   paint: {
-    "line-color": ["case", SEL, "#7d5250",   // selected: muted; its stranded streets are drawn bright red on top (cut)
+    "line-color": ["case", SEL, "#7d5250",   // placeholder; set by setStreetsLook() below
       ["match", ["get", "status"], "red", COLORS.red, "amber", COLORS.amber, "green", COLORS.green, COLORS.not_assessed]],
     "line-width": ["interpolate", ["linear"], ["zoom"], 11, ["case", SEL, 2.2, 1.0], 16, ["case", SEL, 5, 2.6]],
-    // red streets more opaque where more buildings could be cut off; classification itself is unchanged
-    "line-opacity": ["case", SEL, 1, ["match", ["get", "status"],
-      "red", ["interpolate", ["linear"], ["get", "worst_cut"], 30, 0.6, 200, 0.95], "not_assessed", 0.55, 0.85]] } });
+    "line-opacity": 1 } });
+// Street look: status colour with the old per-street opacity carried in the alpha (red streets more opaque where more
+// buildings could be cut off; the selected neighbourhood muted; others receding while one is selected). The layer's own
+// line-opacity is then a constant used only for scenario dimming, which MapLibre can transition.
+const STREET_ALPHA_BASE = ["case", SEL, 1, ["match", ["get", "status"],
+  "red", ["interpolate", ["linear"], ["get", "worst_cut"], 30, 0.6, 200, 0.95], "not_assessed", 0.55, 0.85]];
+const STREET_ALPHA_SELECTED = ["case", SEL, 0.95, 0.3];
+const streetColor = (a) => ["case", SEL, ["rgba", 125, 82, 80, a], ["match", ["get", "status"],
+  "red", ["rgba", 224, 82, 74, a], "amber", ["rgba", 224, 165, 38, a], "green", ["rgba", 63, 178, 127, a], ["rgba", 107, 114, 128, a]]];
+function setStreetsLook(hasSelection) { map.setPaintProperty("streets", "line-color", streetColor(hasSelection ? STREET_ALPHA_SELECTED : STREET_ALPHA_BASE)); }
+setStreetsLook(false);
 map.addLayer({ id: "cut", type: "line", source: "cut", filter: ["==", ["get", "nid"], -1],
   layout: { "line-cap": "round", "line-join": "round" },
   paint: { "line-color": "#ff3b30", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2.5, 16, 6.5] } });
@@ -154,26 +166,26 @@ map.addLayer({ id: "proposal-pts", type: "circle", source: "proposal", filter: [
 for (const s of ["fl-water", "fl-roads", "fl-cut", "fl-cover"]) map.addSource(s, { type: "geojson", data: empty });
 map.addLayer({ id: "fl-cover", type: "line", source: "fl-cover", layout: { visibility: "none" },
   paint: { "line-color": "#93c5fd", "line-width": 1.2, "line-dasharray": [3, 2], "line-opacity": 0.7 } }, "bld-fill");
-map.addLayer({ id: "fl-water", type: "fill", source: "fl-water", layout: { visibility: "none" },
+map.addLayer({ id: "fl-water", type: "fill", source: "fl-water",
   paint: { "fill-color": "#3b82f6", "fill-opacity": 0.55 } }, "bld-fill");
-map.addLayer({ id: "fl-water-line", type: "line", source: "fl-water", layout: { visibility: "none" },
+map.addLayer({ id: "fl-water-line", type: "line", source: "fl-water",
   paint: { "line-color": "#93c5fd", "line-width": 1.2, "line-opacity": 0.9 } }, "bld-fill");
-map.addLayer({ id: "fl-cut", type: "line", source: "fl-cut", layout: { visibility: "none" },
+map.addLayer({ id: "fl-cut", type: "line", source: "fl-cut",
   paint: { "line-color": "#ff7a45", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4.5] } });
-map.addLayer({ id: "fl-roads", type: "line", source: "fl-roads", layout: { visibility: "none", "line-cap": "round" },
+map.addLayer({ id: "fl-roads", type: "line", source: "fl-roads", layout: { "line-cap": "round" },
   paint: { "line-color": "#22d3ee", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 6] } });
 const FLOOD_LAYERS = ["fl-cover", "fl-water", "fl-water-line", "fl-cut", "fl-roads"];
 const SCAN_OVERLAYS = ["choke", "blocked", "blocked-hatch", "blocked-edge", "cut", ...PROBE_LAYERS];   // hidden in scenario modes
-const STREET_OPACITY = map.getPaintProperty("streets", "line-opacity");
+const STREET_OPACITY = map.getPaintProperty("streets", "line-opacity");   // 1: dimming is a transitionable constant
 // fire scenario layers (Tantallon only; hidden unless the fire scenario is active)
 for (const s of ["fi-zone", "fi-roads", "fi-cut"]) map.addSource(s, { type: "geojson", data: empty });
-map.addLayer({ id: "fi-zone", type: "fill", source: "fi-zone", layout: { visibility: "none" },
+map.addLayer({ id: "fi-zone", type: "fill", source: "fi-zone",
   paint: { "fill-color": "#ef4444", "fill-opacity": 0.06 } }, "bld-fill");
-map.addLayer({ id: "fi-zone-line", type: "line", source: "fi-zone", layout: { visibility: "none" },
+map.addLayer({ id: "fi-zone-line", type: "line", source: "fi-zone",
   paint: { "line-color": "#f87171", "line-width": 2.5, "line-dasharray": [3, 1.5] } });
-map.addLayer({ id: "fi-cut", type: "line", source: "fi-cut", layout: { visibility: "none" },
+map.addLayer({ id: "fi-cut", type: "line", source: "fi-cut",
   paint: { "line-color": "#ff7a45", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 16, 4.5] } });
-map.addLayer({ id: "fi-roads", type: "line", source: "fi-roads", layout: { visibility: "none", "line-cap": "round" },
+map.addLayer({ id: "fi-roads", type: "line", source: "fi-roads", layout: { "line-cap": "round" },
   paint: { "line-color": "#fde047", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 6] } });
 map.addSource("fire-preview", { type: "geojson", data: empty });   // drag preview only: never analysed
 map.addSource("fi-hit", { type: "geojson", data: empty });         // centre handle of the supplied area
@@ -184,7 +196,53 @@ map.addLayer({ id: "fi-dot", type: "circle", source: "fi-hit",
   paint: { "circle-color": "#ffffff", "circle-stroke-color": "#ef4444", "circle-stroke-width": 2,
            "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 4, 16, 6] } });
 map.addLayer({ id: "fi-hit", type: "circle", source: "fi-hit", paint: { "circle-radius": 20, "circle-color": "#ffffff", "circle-opacity": 0.01 } });
-const FIRE_LAYERS = ["fi-zone", "fi-zone-line", "fi-cut", "fi-roads", "fpv-fill", "fpv-edge", "fi-dot", "fi-hit"];
+const FIRE_LAYERS = ["fi-zone", "fi-zone-line", "fi-cut", "fi-roads"];   // faded; handle/preview layers are data-driven
+
+// ---------- scenario transitions (presentation only) ----------
+// MapLibre paint-property transitions on OPACITY only. Every state change is applied synchronously; only the opacity of
+// the layers eases towards its target. A new switch mid-fade retargets from the current value, so the map always lands
+// on the latest state - no timer ever holds scenario state. Area switches snap (duration 0).
+const FADE_MS = () => dur(450);
+const OPACITY_PROPS = { fill: ["fill-opacity"], line: ["line-opacity"], circle: ["circle-opacity", "circle-stroke-opacity"],
+                        "fill-extrusion": ["fill-extrusion-opacity"] };
+const FADE_TARGET = {};
+function captureFade(ids) {
+  for (const id of ids) {
+    FADE_TARGET[id] = {};
+    for (const p of OPACITY_PROPS[map.getLayer(id).type]) { const v = map.getPaintProperty(id, p); FADE_TARGET[id][p] = typeof v === "number" ? v : 1; }
+  }
+}
+function fade(ids, on, ms = FADE_MS()) {
+  for (const id of ids) for (const [p, v] of Object.entries(FADE_TARGET[id])) {
+    map.setPaintProperty(id, `${p}-transition`, { duration: ms, delay: 0 });
+    map.setPaintProperty(id, p, on ? v : 0);
+  }
+}
+const fadeState = (id) => Object.fromEntries(Object.keys(FADE_TARGET[id]).map((p) => [p, map.getPaintProperty(id, p)]));
+// streets recede in scenarios (constant line-opacity, see setStreetsLook)
+function streetsDim(on, ms = FADE_MS()) {
+  map.setPaintProperty("streets", "line-opacity-transition", { duration: ms, delay: 0 });
+  map.setPaintProperty("streets", "line-opacity", on ? 0.25 : 1);
+}
+// Buildings: category colours are feature-state and cannot transition. On a scenario switch the building layers dip,
+// then rise once the new categories are applied (applyBuildingCats); a token-guarded fallback only ever RAISES opacity.
+const BLD_FADE = ["bld-fill", "bld-line", "bld-3d"];
+let bldDipped = false, bldDipTok = 0;
+function bldDip() {
+  if (!MOTION) return;
+  const t = ++bldDipTok; bldDipped = true;
+  for (const id of BLD_FADE) for (const [p, v] of Object.entries(FADE_TARGET[id])) {
+    map.setPaintProperty(id, `${p}-transition`, { duration: 120, delay: 0 }); map.setPaintProperty(id, p, v * 0.2);
+  }
+  setTimeout(() => { if (t === bldDipTok && bldDipped) bldRise(); }, 900);
+}
+function bldRise(ms = FADE_MS()) {
+  bldDipped = false; bldDipTok++;
+  fade(BLD_FADE, true, ms);
+}
+captureFade([...SCAN_OVERLAYS, "fl-water", "fl-water-line", "fl-cut", "fl-roads", ...FIRE_LAYERS, ...BLD_FADE]);
+const FLOOD_FADE = ["fl-water", "fl-water-line", "fl-cut", "fl-roads"];
+fade(FLOOD_FADE, false, 0); fade(FIRE_LAYERS, false, 0);
 let fireOn = false, fireGen = 0, fireData = null, fireMode = "hyp", fireCentre = null;
 // The vulnerability view saved when the FIRST scenario opens (selection + footprint source/pin). Switching flood <-> fire
 // hands it over unchanged ("handoff"); returning to vulnerability restores it; selection/area changes discard it.
@@ -286,9 +344,9 @@ function select(nid) {
   selected = nid;
   const f = scanData.neighbourhoods.features.find((f) => f.id === nid);
   const panel = document.getElementById("panel");
-  if (!f) { panel.classList.add("hidden"); map.setPaintProperty("streets", "line-opacity", STREET_OPACITY); updateChokeFilter(); syncMode(); return; }
+  if (!f) { panel.classList.add("hidden"); setStreetsLook(false); updateChokeFilter(); syncMode(); return; }
   map.setFeatureState({ source: "streets", id: nid }, { selected: true });
-  map.setPaintProperty("streets", "line-opacity", ["case", SEL, 0.95, 0.3]);   // other streets recede while selected
+  setStreetsLook(true);                                   // other streets recede while selected
   panel.className = `card ${f.properties.status}`;
   panel.innerHTML = panelHtml(f.properties) + `<div id="bldInfo"></div>`;
   settleIn(panel);
@@ -335,15 +393,17 @@ function applyBuildingCats() {
   if (!bldShown.ready) return;                 // never paint one source's ids onto the other source's polygons
   // the flood scenario and the selected-neighbourhood view never mix: one or the other drives the categories
   const scen = floodOn ? floodData : fireOn ? fireData : null;     // a scenario mode, if active, owns the categories
-  const cats = (floodOn || fireOn) ? (scen && scen.area === bldShown.area ? scen.ids[bldShown.src] : null)
+  const cats0 = (floodOn || fireOn) ? (scen && scen.area === bldShown.area ? scen.ids[bldShown.src] : null)
                : probeShown() && probe.area === bldShown.area ? probe.data.ids[bldShown.src]
                : (bldCats && bldCats.area === bldShown.area ? bldCats.sources[bldShown.src] : null);
-  if (!cats) return;
+  const cats = cats0;
+  if (!cats) { if (bldDipped && !floodOn && !fireOn) bldRise(); return; }   // vulnerability with nothing selected
   const ns = bldShown.ns;
   for (const cat of ["retain", "cut", "inside"]) for (const id of cats[cat]) {
     map.setFeatureState({ source: "bld", id: id + ns }, { cat }); bldStateN++;
   }
   bldAppliedNs = ns;
+  if (bldDipped) bldRise();                    // the new categories are on: buildings ease back in
   if (floodOn) renderFloodKey(); else if (fireOn) renderFireKey(); else renderBuildingInfo();
 }
 
@@ -446,7 +506,9 @@ async function loadArea(name) {
   map.getSource("blocked").setData(scan.blocked);
   map.getSource("choke").setData(scan.chokepoints);
   selected = null;
-  map.setPaintProperty("streets", "line-opacity", STREET_OPACITY);
+  setStreetsLook(false); streetsDim(false, 0);
+  fade(SCAN_OVERLAYS, true, 0); fade(FLOOD_FADE, false, 0); fade(FIRE_LAYERS, false, 0);   // area switch: snap
+  bldRise(0);
   document.getElementById("panel").classList.add("hidden");
   map.setFilter("cut", ["==", ["get", "nid"], -1]);
   setBlockedFilter(-1);
@@ -651,6 +713,7 @@ async function runFlood(g) {
   map.getSource("fl-water").setData(s.water);
   map.getSource("fl-roads").setData(s.roads_affected);
   map.getSource("fl-cut").setData(s.cut_roads);
+  fade(FLOOD_FADE, true);                                        // no-op when already shown (e.g. a new level)
   out.innerHTML = floodHtml(s) + `<div id="floodBld"></div>`;
   settleIn(out);
   out.dataset.state = "done";
@@ -672,9 +735,9 @@ async function enterFlood(g) {
     selected = null;
     $("panel").classList.add("hidden");
     floodOn = true;
-    SCAN_OVERLAYS.forEach((l) => map.setLayoutProperty(l, "visibility", "none"));
-    map.setPaintProperty("streets", "line-opacity", 0.25);
-    FLOOD_LAYERS.forEach((l) => map.setLayoutProperty(l, "visibility", "visible"));
+    fade(SCAN_OVERLAYS, false); streetsDim(true); bldDip();
+    map.setLayoutProperty("fl-cover", "visibility", "visible");   // a caveat (elevation coverage): shown at once
+    fade(FLOOD_FADE, false, 0);                                   // the water eases in when its result lands
     $("drawBtn").disabled = true;
     $("floodCtl").classList.remove("hidden");
     syncMode();
@@ -701,10 +764,11 @@ function exitFlood(how = "restore") {           // "restore" | "discard" | "hand
   how = exitHow(how);
   floodGen++; floodAct++;                       // invalidate pending scenario requests AND initializations
   floodOn = false; floodData = null; coverInstalled = false;
-  ["fl-water", "fl-roads", "fl-cut"].forEach((l) => map.getSource(l).setData(empty));
-  FLOOD_LAYERS.forEach((l) => map.setLayoutProperty(l, "visibility", "none"));
-  SCAN_OVERLAYS.forEach((l) => map.setLayoutProperty(l, "visibility", "visible"));
-  map.setPaintProperty("streets", "line-opacity", STREET_OPACITY);
+  const snap = how === "discard";                              // area / selection change: no fade
+  map.setLayoutProperty("fl-cover", "visibility", "none");
+  fade(FLOOD_FADE, false, snap ? 0 : FADE_MS());               // fades out; the next result replaces the data
+  if (snap) ["fl-water", "fl-roads", "fl-cut"].forEach((l) => map.getSource(l).setData(empty));
+  if (how !== "handoff") { fade(SCAN_OVERLAYS, true, snap ? 0 : FADE_MS()); streetsDim(false, snap ? 0 : FADE_MS()); if (!snap) bldDip(); }
   $("drawBtn").disabled = false;
   $("floodCtl").classList.add("hidden");
   syncMode();
@@ -818,6 +882,7 @@ async function runFire() {
   map.getSource("fi-zone").setData(s.zone);
   map.getSource("fi-roads").setData(s.roads_affected);
   map.getSource("fi-cut").setData(s.cut_roads);
+  fade(FIRE_LAYERS, true);                                     // no-op when already shown (e.g. a moved centre)
   out.innerHTML = fireHtml(s) + `<div id="fireBld"></div>`;
   settleIn(out);
   out.dataset.state = "done";
@@ -834,6 +899,7 @@ function setFireMode(mode) {
   $("fireHyp").classList.toggle("hidden", mode !== "hyp");
   clearFireDrag();                                              // a mode change ends any drag and its preview
   fireGen++; fireData = null;                                   // a new mode supersedes any pending calculation
+  fade(FIRE_LAYERS, false, 0);
   ["fi-zone", "fi-roads", "fi-cut"].forEach((l) => map.getSource(l).setData(empty));
   applyBuildingCats();
   map.getCanvas().style.cursor = fireOn && mode === "hyp" ? "crosshair" : "";
@@ -850,9 +916,8 @@ function enterFire(mode) {
     selected = null;
     $("panel").classList.add("hidden");
     fireOn = true;
-    SCAN_OVERLAYS.forEach((l) => map.setLayoutProperty(l, "visibility", "none"));
-    map.setPaintProperty("streets", "line-opacity", 0.25);
-    FIRE_LAYERS.forEach((l) => map.setLayoutProperty(l, "visibility", "visible"));
+    fade(SCAN_OVERLAYS, false); streetsDim(true); bldDip();
+    fade(FIRE_LAYERS, false, 0);                                  // the supplied area eases in when its result lands
     $("drawBtn").disabled = true;
     $("fireCtl").classList.remove("hidden");
   }
@@ -865,10 +930,10 @@ function exitFire(how = "restore") {            // "restore" | "discard" | "hand
   fireGen++;                                    // invalidate any pending scenario request
   fireOn = false; fireData = null; fireCentre = null;
   renderFireHandle(); renderFireBadge();
-  ["fi-zone", "fi-roads", "fi-cut"].forEach((l) => map.getSource(l).setData(empty));
-  FIRE_LAYERS.forEach((l) => map.setLayoutProperty(l, "visibility", "none"));
-  SCAN_OVERLAYS.forEach((l) => map.setLayoutProperty(l, "visibility", "visible"));
-  map.setPaintProperty("streets", "line-opacity", STREET_OPACITY);
+  const snap = how === "discard";                              // area / selection change: no fade
+  fade(FIRE_LAYERS, false, snap ? 0 : FADE_MS());              // fades out; the next result replaces the data
+  if (snap) ["fi-zone", "fi-roads", "fi-cut"].forEach((l) => map.getSource(l).setData(empty));
+  if (how !== "handoff") { fade(SCAN_OVERLAYS, true, snap ? 0 : FADE_MS()); streetsDim(false, snap ? 0 : FADE_MS()); if (!snap) bldDip(); }
   map.getCanvas().style.cursor = "";
   $("drawBtn").disabled = false;
   $("fireCtl").classList.add("hidden");
@@ -1402,6 +1467,13 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
     vis3d: map.getLayoutProperty("bld-3d", "visibility"), vis2d: map.getLayoutProperty("bld-fill", "visibility"),
     noteHidden: $("viewNote").classList.contains("hidden") }),
   scenSaved: () => scenSaved && { ...scenSaved },
+  fadeState: (id) => fadeState(id), streetsOpacity: () => map.getPaintProperty("streets", "line-opacity"),
+  bldDipped: () => bldDipped,
+  async transitionFps(to = "fire") {   // frames rendered during one scenario switch (Chrome performance check)
+    let n = 0; const c = () => n++; map.on("render", c);
+    document.querySelector(`#modes [data-mode="${to}"]`).click();
+    await new Promise((r) => setTimeout(r, 600)); map.off("render", c); return Math.round(n / 0.6);
+  },
   fireDataArea: () => fireData && fireData.area,
   histHidden: () => document.querySelector('#fireModes [data-mode="hist"]').classList.contains("hidden"),
   fireState: () => ({ on: fireOn, mode: fireMode, area: current, cardState: $("fireOut").dataset.state || null,
@@ -1418,4 +1490,4 @@ window.__app = {   // for debugging, scripted demo and the ?selftest=1 checks
              clearVisible: !document.getElementById("clearBtn").classList.contains("hidden") };
   },
 };
-if (["1", "flood", "fire", "3d", "demo", "probe", "motion", "xarea", "firedrag"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only
+if (["1", "flood", "fire", "3d", "demo", "probe", "motion", "xarea", "firedrag", "trans"].includes(q.get("selftest"))) import("/selftest.js");   // explicit test URLs only
